@@ -1,15 +1,17 @@
+// minerserver.js
 const WebSocket = require('ws');
 const crypto = require('crypto');
 const express = require('express');
+const EC = require('elliptic').ec;
 const net = require('net');
-
-//exposing a REST API to interact with the miner
 
 const app = express();
 app.use(express.json());
 let PORT = 3000;
 
-//if 3000 already in use, try 3001 or 3002
+const ec = new EC('secp256k1');
+
+// If 3000 already in use, try 3001 or 3002
 function checkPortInUse(PORT, callback) {
     const server = net.createServer();
     server.once('error', function (err) {
@@ -43,14 +45,35 @@ checkPortInUse(PORT, (err, availablePort) => {
 function launchServer() {
     // Expose sendTransaction via an Express API
     app.post('/sendTransaction', (req, res) => {
-        const { sender, recipient, amount, privateKey } = req.body;
-
-        if (!sender || !recipient || !amount || !privateKey) {
-            return res.status(400).send('Missing required fields');
+        const { recipient, amount, privateKey } = req.body;
+        if (amount <= 0) {
+            return res.status(400).send('Amount must be greater than 0');
         }
-
-        sendTransaction(sender, recipient, amount, privateKey);
+        //making sure recipient is a valid address
+        if (recipient.length !== 40) {
+            return res.status(400).send('Invalid recipient address');
+        }
+        if (privateKey.length !== 64) {
+            return res.status(400).send('Invalid private key');
+        }
+        sendTransaction(recipient, amount, privateKey);
         res.send('Transaction processed');
+    });
+
+    // Expose getBalances via an Express API
+    app.get('/getBalances', (req, res) => {
+        res.send(balances);
+    });
+
+    //expose blockheight via an Express API
+    app.get('/getBlockHeight', (req, res) => {
+        res.send({ blockHeight: blockchain.length });
+    });
+
+    // expose getbalance of a specific address via an Express API
+    app.get('/getBalance/:address', (req, res) => {
+        const { address } = req.params;
+        res.send({ balance: balances[address] || 0 });
     });
 
     app.listen(PORT, () => {
@@ -97,7 +120,11 @@ function launchServer() {
             mineBlock();
         } else if (data.type === 'block_finalized') {
             canMine = false;
-            console.log('Mining stopped as block was finalized');
+            balances = data.balances;  // Sync balances after block is finalized
+            console.log('Mining stopped as block was finalized and balances synced');
+        } else if (data.type === 'balances') {
+            balances = data.balances;
+            console.log('Balances synced:', balances);
         }
     });
 
@@ -105,6 +132,11 @@ function launchServer() {
         const lastBlock = blockchain[blockchain.length - 1];
 
         if (lastBlock && lastBlock.hash === newBlock.previousHash) {
+            if (newBlock.index === blockchain.length) {
+                console.log('Block already added locally, skipping duplicate processing');
+                return;
+            }
+
             blockchain.push(newBlock);
             updateLocalBalances(newBlock.transactions);
             console.log('New block added to the chain:', newBlock);
@@ -123,21 +155,27 @@ function launchServer() {
         }
     }
 
-    function validateTransaction(transaction) {
-        const { sender, recipient, amount, signature } = transaction;
 
-        const verifier = crypto.createVerify('SHA256');
-        verifier.update(JSON.stringify({ sender, recipient, amount }));
-        const isValid = verifier.verify(sender, signature, 'hex');
+    function publicKeyToAddress(publicKey) {
+        const sha256 = crypto.createHash('sha256').update(publicKey, 'hex').digest();
+        const ripemd160 = crypto.createHash('ripemd160').update(sha256).digest('hex');
+        return ripemd160;
+    }
+
+    function validateTransaction(transaction) {
+        const { publicKey, recipient, amount, timestamp, signature } = transaction;
+
+        const key = ec.keyFromPublic(publicKey, 'hex');
+        const isValid = key.verify(crypto.createHash('sha256').update(publicKey + recipient + amount + timestamp).digest(), signature);
+
+        // for managing balances this has nothing to do with signature verification
+        const senderAddress = publicKeyToAddress(publicKey);
 
         // Check if sender has enough balance
-        if (balances[sender] === undefined || balances[sender] < amount) {
+        if (balances[senderAddress] === undefined || balances[senderAddress] < amount) {
             console.log('Transaction rejected due to insufficient balance');
             return false;
         }
-
-        // Additional checks can be added here
-
         if (isValid) {
             console.log('Transaction is valid');
             return true;
@@ -158,7 +196,6 @@ function launchServer() {
         let nonce = 0;
         let hash;
 
-        // Filter out any invalid transactions before mining
         const validTransactions = transactionPool.filter(validateTransaction);
 
         if (validTransactions.length === 0) {
@@ -166,7 +203,6 @@ function launchServer() {
             return;
         }
 
-        // Simple proof-of-work algorithm with dynamic difficulty
         do {
             nonce++;
             hash = crypto.createHash('sha256')
@@ -182,24 +218,37 @@ function launchServer() {
         const block = {
             index: blockchain.length,
             timestamp: Date.now(),
-            transactions: validTransactions,  // Include only valid transactions in the block
+            transactions: validTransactions,
             nonce,
             hash,
             previousHash,
         };
 
-        ws.send(JSON.stringify({ type: 'block', block }));
-        canMine = false;  // Stop further mining
+        console.log(`Block verified: ${JSON.stringify(block)}`);
 
-        // Clear the transaction pool only of valid transactions that were included in the block
+        // Clear the transaction pool immediately after mining
         transactionPool = transactionPool.filter(tx => !validTransactions.includes(tx));
+
+        // Directly update balances before sending the block
         updateLocalBalances(validTransactions);
+
+        ws.send(JSON.stringify({ type: 'block', block }));
+        console.log('Block sent to central server');
+        canMine = false;
     }
+
 
     // Function to update local balances based on transactions in the received block
     function updateLocalBalances(transactions) {
         transactions.forEach(tx => {
-            const { sender, recipient, amount } = tx;
+            const { publicKey, recipient, amount } = tx;
+
+            const sender = publicKeyToAddress(publicKey);
+            console.log("Sender:", sender);
+            if (sender === undefined) {
+                console.log('Invalid sender address');
+                return;
+            }
 
             // Deduct the amount from the sender's balance
             if (balances[sender] !== undefined) {
@@ -231,28 +280,32 @@ function launchServer() {
     }
 
     // Function to create and send a new transaction
-    function sendTransaction(sender, recipient, amount, privateKey) {
-        if (balances[sender] === undefined || balances[sender] < amount) {
+    function sendTransaction(recipient, amount, privateKey) {
+        // Derive the public key from the private key
+        const key = ec.keyFromPrivate(privateKey, 'hex');
+        const publicKey = key.getPublic().encode('hex');
+        const senderAddress = publicKeyToAddress(publicKey);
+
+        if (balances[senderAddress] === undefined || balances[senderAddress] < amount) {
             console.log('Insufficient balance to send the transaction');
             return;
         }
 
+
         const transaction = {
-            sender,
+            publicKey,  // Use the public key as the sender
             recipient,
             amount,
             timestamp: Date.now()
         };
 
-        // Sign the transaction with the sender's private key
-        const sign = crypto.createSign('SHA256');
-        sign.update(JSON.stringify({ sender, recipient, amount }));
-        const signature = sign.sign(privateKey, 'hex');
+        const transactionData = publicKey + recipient + amount + transaction.timestamp;
+        const signature = key.sign(crypto.createHash('sha256').update(transactionData).digest()).toDER('hex');
 
         transaction.signature = signature;
 
         // Handle and broadcast the transaction
         handleTransaction(transaction);
     }
-
 }
+

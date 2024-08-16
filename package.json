@@ -1,7 +1,8 @@
 {
 	"dependencies": {
-		"ws": "^8.18.0",
 		"crypto": "^1.0.1",
-		"express": "^4.19.2"
+		"elliptic": "^6.5.7",
+		"express": "^4.19.2",
+		"ws": "^8.18.0"
 	}
 }

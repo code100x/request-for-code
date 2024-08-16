@@ -1,7 +1,11 @@
+// centralServer.js
+
 const WebSocket = require('ws');
 const crypto = require('crypto');
 const fs = require('fs');
+const EC = require('elliptic').ec;
 
+const ec = new EC('secp256k1');
 const wss = new WebSocket.Server({ port: 8080 });
 
 let blockchain = [];  // Store blockchain in-memory
@@ -12,35 +16,42 @@ const adjustmentInterval = 5;  // Adjust difficulty every 5 blocks
 let balances = {};  // Ledger to track account balances
 let miningInProgress = false;  // Flag to prevent multiple blocks being mined in the same interval
 
+// Function to create a wallet with public key, private key, and address
+function createWallet() {
+    const keyPair = ec.genKeyPair();
+    const privateKey = keyPair.getPrivate('hex');
+    const publicKey = keyPair.getPublic('hex');
+    const address = publicKeyToAddress(publicKey);
+
+    return { publicKey, privateKey, address };
+}
+
+// Function to derive address from public key
+function publicKeyToAddress(publicKey) {
+    const sha256 = crypto.createHash('sha256').update(publicKey, 'hex').digest();
+    const ripemd160 = crypto.createHash('ripemd160').update(sha256).digest('hex');
+    return ripemd160;
+}
+
 // Function to create key pairs and fund initial balances
 async function initializeBlockchain() {
-    const keypairs = [];
-    const initialBalance = 10000000;
     const wallets = [];
+    const initialBalance = 10000000;
 
     for (let i = 0; i < 4; i++) {
-        const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
-            modulusLength: 2048,
-            publicKeyEncoding: { type: 'spki', format: 'pem' },
-            privateKeyEncoding: { type: 'pkcs8', format: 'pem' }
-        });
-
-        keypairs.push({ publicKey, privateKey });
+        const wallet = createWallet();
 
         // Assign the initial balance to the wallet
-        balances[publicKey] = initialBalance;
+        balances[wallet.address] = initialBalance;
 
-        wallets.push({ publicKey: publicKey, privateKey: privateKey, balance: initialBalance });
+        wallets.push({ publicKey: wallet.publicKey, privateKey: wallet.privateKey, address: wallet.address, balance: initialBalance });
     }
-    console.log('Wallets:', wallets);
-
 
     console.log('Balances:', balances);
-    console.log("starting the file save");
+    console.log("Starting the file save");
 
     // Save the wallet information to a file
     fs.writeFileSync('fund-wallets.txt', JSON.stringify(wallets, null, 2));
-
 
     const genesisBlock = {
         index: 0,
@@ -53,15 +64,13 @@ async function initializeBlockchain() {
     blockchain.push(genesisBlock);
 }
 
-
-
 wss.on('connection', (ws) => {
     miners.push(ws);
     console.log('New miner connected');
 
-    //check if the blockchain is empty
+    // Check if the blockchain is empty
     if (blockchain.length === 0) {
-        //intilizing the blockchain
+        // Initializing the blockchain
         initializeBlockchain();
         console.log('Blockchain initialized');
     }
@@ -76,7 +85,7 @@ wss.on('connection', (ws) => {
                 miningInProgress = true;
                 console.log('Block mined and accepted, stopping mining');
 
-                // Broadcast the new block to all miners
+                // Broadcast the new block and updated balances to all miners
                 miners.forEach(miner => {
                     if (miner !== ws) {
                         miner.send(JSON.stringify({ type: 'block', block: data.block, difficulty, balances }));
@@ -85,7 +94,7 @@ wss.on('connection', (ws) => {
 
                 // Notify miners to stop mining
                 miners.forEach(miner => {
-                    miner.send(JSON.stringify({ type: 'block_finalized', blockIndex: data.block.index }));
+                    miner.send(JSON.stringify({ type: 'block_finalized', blockIndex: data.block.index, balances }));
                 });
 
                 // Adjust difficulty if necessary
@@ -103,6 +112,8 @@ wss.on('connection', (ws) => {
                 }
             });
             console.log('Transaction broadcasted to all miners');
+        } else if (data.type === 'request_balances') {
+            ws.send(JSON.stringify({ type: 'balances', balances }));
         }
     });
 
@@ -142,7 +153,6 @@ function adjustDifficulty() {
     const lastBlock = blockchain[blockchain.length - 1];
     const blocksToConsider = blockchain.slice(-adjustmentInterval);
 
-    // Calculate the average block time for the last 'adjustmentInterval' blocks
     const totalBlockTime = blocksToConsider.reduce((total, block, index) => {
         if (index > 0) {
             return total + (block.timestamp - blocksToConsider[index - 1].timestamp);
@@ -152,7 +162,6 @@ function adjustDifficulty() {
 
     const averageBlockTime = totalBlockTime / (blocksToConsider.length - 1);
 
-    // Adjust difficulty based on the average block time
     if (averageBlockTime < targetBlockTime) {
         difficulty++;
         console.log('Difficulty increased to:', difficulty);
@@ -165,13 +174,19 @@ function adjustDifficulty() {
 // Function to update balances based on the transactions in a new block
 function updateBalances(transactions) {
     transactions.forEach(tx => {
-        const { sender, recipient, amount } = tx;
+        const { publicKey, recipient, amount } = tx;
 
+        const sender = publicKeyToAddress(publicKey);
+        console.log("Sender:", sender);
+        if (sender === undefined) {
+            console.log('Invalid sender address');
+            return;
+        }
         // Deduct the amount from the sender's balance
         if (balances[sender] !== undefined) {
             balances[sender] -= amount;
         } else {
-            balances[sender] = -amount;  // Allow negative balance (overdraft) for simplicity
+            balances[sender] = -amount;
         }
 
         // Add the amount to the recipient's balance
@@ -188,7 +203,7 @@ function updateBalances(transactions) {
 // Start mining process at regular intervals
 setInterval(() => {
     miningInProgress = false;
-    console.log('New mining round started');
+    console.log('New mining Epoch started');
     miners.forEach(miner => {
         miner.send(JSON.stringify({ type: 'start_mining', difficulty }));
     });
