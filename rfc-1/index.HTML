@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple BTC Wallet</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            color: #333;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            width: 80%;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        h1, h2 {
+            color: #333;
+        }
+
+        button {
+            background-color: #008cba;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        button:hover {
+            background-color: #005f75;
+        }
+
+        input[type="text"],
+        input[type="number"] {
+            width: calc(100% - 24px);
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+
+        .wallet-info,
+        .transaction-info {
+            margin-top: 20px;
+        }
+
+        .transaction-log {
+            margin-top: 30px;
+            background-color: #f9f9f9;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+
+        .transaction-log p {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Simple BTC Wallet</h1>
+        <button id="createWallet">Create Wallet</button>
+        <div class="wallet-info">
+            <h2>Your Wallet</h2>
+            <p>Public Key: <span id="publicKey">N/A</span></p>
+            <p>Private Key: <span id="privateKey">N/A</span></p>
+        </div>
+
+        <div class="transaction-info">
+            <h2>Sign and Send Transaction</h2>
+            <input type="text" id="toAddress" placeholder="Recipient Address">
+            <input type="number" id="amount" placeholder="Amount">
+            <button id="signTransaction">Sign and Send Transaction</button>
+        </div>
+
+        <div class="transaction-log">
+            <h2>Transaction Log</h2>
+            <div id="transactionLog"></div>
+        </div>
+    </div>
+
+    <script>
+        let privateKey;
+        let publicKey;
+
+        document.getElementById('createWallet').addEventListener('click', () => {
+            const keys = createWallet();
+            privateKey = keys.privateKey;
+            publicKey = keys.publicKey;
+
+            document.getElementById('publicKey').innerText = publicKey;
+            document.getElementById('privateKey').innerText = privateKey;
+        });
+
+        document.getElementById('signTransaction').addEventListener('click', () => {
+            const toAddress = document.getElementById('toAddress').value;
+            const amount = document.getElementById('amount').value;
+            const transaction = signTransaction(toAddress, amount);
+
+            // Display transaction in the log
+            const log = document.getElementById('transactionLog');
+            const p = document.createElement('p');
+            p.innerText = `Transaction: ${amount} BTC to ${toAddress}`;
+            log.appendChild(p);
+
+            // Send transaction to a miner
+            const ws = new WebSocket('ws://localhost:8080');
+            ws.onopen = () => {
+                ws.send(JSON.stringify(transaction));
+                ws.close();
+            };
+        });
+
+        function createWallet() {
+            // Dummy wallet creation (replace with real key generation)
+            return {
+                privateKey: 'dummyPrivateKey_' + Math.random().toString(36).substring(2, 15),
+                publicKey: 'dummyPublicKey_' + Math.random().toString(36).substring(2, 15)
+            };
+        }
+
+        function signTransaction(to, amount) {
+            const transaction = {
+                from: publicKey,
+                to,
+                amount,
+                timestamp: Date.now()
+            };
+
+            // Dummy signature (replace with real signing)
+            transaction.signature = 'dummySignature_' + Math.random().toString(36).substring(2, 15);
+            return transaction;
+        }
+    </script>
+</body>
+
+</html>
