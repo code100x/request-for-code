@@ -1,0 +1,18 @@
+{
+    "name": "bitcoin-like-server",
+    "version": "1.0.0",
+    "description": "A simple Bitcoin-like blockchain server with Node.js",
+    "main": "server/index.js",
+    "scripts": {
+        "start": "node server/index.js",
+        "miner": "node server/minerServer.js",
+        "central": "node server/centralServer.js"
+    },
+    "dependencies": {
+        "crypto": "^1.0.1",
+        "express": "^4.17.1",
+        "miner": "^1.0.1",
+        "websocket": "^1.0.35",
+        "ws": "^7.5.0"
+    }
+}

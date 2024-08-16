@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bitcoin-like App</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app">
+        <h1>Bitcoin-like Blockchain</h1>
+        <div>
+            <button id="create-wallet">Create Wallet</button>
+            <pre id="wallet-info"></pre>
+        </div>
+        <div id="transaction-section" style="display:none;">
+            <h2>Create Transaction</h2>
+            <input id="recipient" placeholder="Recipient Address">
+            <input id="amount" placeholder="Amount" type="number">
+            <button id="sign-transaction">Sign Transaction</button>
+            <pre id="transaction-info"></pre>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
