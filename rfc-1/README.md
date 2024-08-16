@@ -8,3 +8,6 @@ Create a simple Bitcoin like server that has the following components -
 3. Frontend -
  - Lets the user create a BTC wallet
  - Lets the user sign a txn, send it over to one of the miner servers
+
+
+Tech stack - Preferably Node.js/Golang for the servers
