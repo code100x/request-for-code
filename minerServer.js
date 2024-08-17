@@ -1,7 +1,7 @@
-// minerserver.js
+// minerServer.js
 const WebSocket = require('ws');
-const crypto = require('crypto');
 const express = require('express');
+const { generateBlockHash, publicKeyToAddress, createTransaction, validateTransaction, validateBlock } = require('./blockchainUtils');
 const EC = require('elliptic').ec;
 const net = require('net');
 
@@ -10,6 +10,12 @@ app.use(express.json());
 let PORT = 3000;
 
 const ec = new EC('secp256k1');
+
+let miningInterval = null; // Store the mining interval
+let resyncTimeout = null; // Timeout for resync after block rejection
+
+const resyncThreshold = 4; // Number of seconds to wait before resyncing
+const miningIntervalTime = 30000; // Time in milliseconds between mining blocks
 
 // If 3000 already in use, try 3001 or 3002
 function checkPortInUse(PORT, callback) {
@@ -49,7 +55,6 @@ function launchServer() {
         if (amount <= 0) {
             return res.status(400).send('Amount must be greater than 0');
         }
-        //making sure recipient is a valid address
         if (recipient.length !== 40) {
             return res.status(400).send('Invalid recipient address');
         }
@@ -65,12 +70,12 @@ function launchServer() {
         res.send(balances);
     });
 
-    //expose blockheight via an Express API
+    // Expose getBlockHeight via an Express API
     app.get('/getBlockHeight', (req, res) => {
         res.send({ blockHeight: blockchain.length });
     });
 
-    // expose getbalance of a specific address via an Express API
+    // Expose getBalance of a specific address via an Express API
     app.get('/getBalance/:address', (req, res) => {
         const { address } = req.params;
         res.send({ balance: balances[address] || 0 });
@@ -86,7 +91,6 @@ function launchServer() {
     let transactionPool = [];  // Local pool for unconfirmed transactions
     let difficulty;  // Difficulty will be updated by the central server
     let balances = {};  // Ledger to track account balances
-    let canMine = false;  // Flag to control mining
 
     ws.on('open', () => {
         console.log('Connected to central server');
@@ -97,165 +101,134 @@ function launchServer() {
     ws.on('message', (message) => {
         const data = JSON.parse(message);
 
-        if (data.type === 'block') {
+        if (data.type === 'block_accepted') {
+            console.log('Block accepted:', data.block);
+            clearTimeout(resyncTimeout); // Clear resync timeout
+            blockchain.push(data.block);
+            updateLocalBalances(data.block.transactions);
+            // Start mining the next block
+            miningInterval = setTimeout(mineBlock, miningIntervalTime);  // Adjust the interval as needed
+        } else if (data.type === 'block_rejected') {
+            console.log('Block rejected:', data.block);
+            console.log('Waiting for the correct block from the central server...');
+
+            resyncTimeout = setTimeout(() => {
+                console.log('No new block received. Resyncing with the central server...');
+                ws.send(JSON.stringify({ type: 'request_blockchain' }));
+            }, resyncThreshold * 1000);
+        } else if (data.type === 'block') {
+            console.log('New block received, stopping current mining and updating blockchain.');
+            clearInterval(miningInterval);  // Stop current mining
+            clearTimeout(resyncTimeout);  // Clear resync timeout
             handleReceivedBlock(data.block);
             difficulty = data.difficulty;  // Update difficulty
             balances = data.balances;  // Update balances
         } else if (data.type === 'blockchain') {
-            if (data.blockchain.length > blockchain.length) {
-                blockchain = data.blockchain;
-                difficulty = data.difficulty;  // Update difficulty
-                balances = data.balances;  // Update balances
-                console.log('Blockchain, difficulty, and balances updated');
-            } else {
-                console.log('Received blockchain is not longer, ignoring');
-            }
+            console.log('Blockchain received from central server. Validating...');
+            validateReceivedBlockchain(data.blockchain, data.difficulty, data.balances);
         } else if (data.type === 'transaction') {
             console.log('Received transaction from central server, adding to pool');
             transactionPool.push(data.transaction);
-        } else if (data.type === 'start_mining') {
-            difficulty = data.difficulty;  // Update difficulty
-            canMine = true;
-            console.log('Received start mining signal');
-            mineBlock();
-        } else if (data.type === 'block_finalized') {
-            canMine = false;
-            balances = data.balances;  // Sync balances after block is finalized
-            console.log('Mining stopped as block was finalized and balances synced');
-        } else if (data.type === 'balances') {
-            balances = data.balances;
-            console.log('Balances synced:', balances);
+        } else if (data.type === 'transactionPool') {
+            console.log('Received updated transaction pool from central server');
+            transactionPool = data.transactionPool;
         }
     });
 
-    function handleReceivedBlock(newBlock) {
-        const lastBlock = blockchain[blockchain.length - 1];
+    function validateReceivedBlockchain(receivedBlockchain, receivedDifficulty, receivedBalances) {
+        const localLastBlock = blockchain[blockchain.length - 1];
+        const receivedLastBlock = receivedBlockchain[receivedBlockchain.length - 1];
 
-        if (lastBlock && lastBlock.hash === newBlock.previousHash) {
-            if (newBlock.index === blockchain.length) {
-                console.log('Block already added locally, skipping duplicate processing');
-                return;
-            }
-
-            blockchain.push(newBlock);
-            updateLocalBalances(newBlock.transactions);
-            console.log('New block added to the chain:', newBlock);
-        } else if (lastBlock && newBlock.index === blockchain.length) {
-            console.log('Fork detected. Comparing chains...');
-
-            if (validateBlock(newBlock)) {
-                blockchain.push(newBlock);
-                updateLocalBalances(newBlock.transactions);
-                console.log('Fork resolved: Added new block as it extends a longer chain.');
-            } else {
-                console.log('Fork rejected: New block does not lead to a longer chain.');
-            }
+        // Accept the received blockchain if it's longer or if the heights are equal and hashes match
+        if (
+            receivedBlockchain.length > blockchain.length ||
+            (receivedBlockchain.length === blockchain.length && receivedLastBlock.hash === localLastBlock.hash)
+        ) {
+            console.log('Received blockchain is valid. Updating local blockchain.');
+            blockchain = receivedBlockchain;
+            difficulty = receivedDifficulty;
+            balances = receivedBalances;
+            clearTimeout(resyncTimeout); // Clear resync timeout
+            miningInterval = setTimeout(mineBlock, miningIntervalTime); // Start mining again
         } else {
-            console.log('Invalid block rejected');
-        }
-    }
-
-
-    function publicKeyToAddress(publicKey) {
-        const sha256 = crypto.createHash('sha256').update(publicKey, 'hex').digest();
-        const ripemd160 = crypto.createHash('ripemd160').update(sha256).digest('hex');
-        return ripemd160;
-    }
-
-    function validateTransaction(transaction) {
-        const { publicKey, recipient, amount, timestamp, signature } = transaction;
-
-        const key = ec.keyFromPublic(publicKey, 'hex');
-        const isValid = key.verify(crypto.createHash('sha256').update(publicKey + recipient + amount + timestamp).digest(), signature);
-
-        // for managing balances this has nothing to do with signature verification
-        const senderAddress = publicKeyToAddress(publicKey);
-
-        // Check if sender has enough balance
-        if (balances[senderAddress] === undefined || balances[senderAddress] < amount) {
-            console.log('Transaction rejected due to insufficient balance');
-            return false;
-        }
-        if (isValid) {
-            console.log('Transaction is valid');
-            return true;
-        } else {
-            console.log('Transaction is invalid');
-            return false;
+            console.log('Received blockchain is shorter and hashes do not match. Ignoring...');
         }
     }
 
     function mineBlock() {
-        if (!canMine || transactionPool.length === 0) {
-            console.log('Cannot mine: Either mining is not allowed or no transactions to mine');
-            return;
-        }
-
         const previousBlock = blockchain[blockchain.length - 1];
         const previousHash = previousBlock ? previousBlock.hash : '';
         let nonce = 0;
         let hash;
+        const index = blockchain.length;
+        const timestamp = Date.now();
 
-        const validTransactions = transactionPool.filter(validateTransaction);
-
-        if (validTransactions.length === 0) {
-            console.log('No valid transactions to mine');
-            return;
-        }
+        const validTransactions = transactionPool.filter(tx => validateTransaction(tx, balances)) || [];
 
         do {
             nonce++;
-            hash = crypto.createHash('sha256')
-                .update(previousHash + JSON.stringify(validTransactions) + nonce)
-                .digest('hex');
-        } while (hash.substring(0, difficulty) !== '0'.repeat(difficulty) && canMine);
-
-        if (!canMine) {
-            console.log('Mining was stopped');
-            return;
-        }
+            hash = generateBlockHash({
+                index,
+                timestamp,
+                transactions: validTransactions,
+                nonce,
+                previousHash,
+            });
+        } while (hash.substring(0, difficulty) !== '0'.repeat(difficulty));
 
         const block = {
-            index: blockchain.length,
-            timestamp: Date.now(),
+            index,
+            timestamp,
             transactions: validTransactions,
             nonce,
             hash,
             previousHash,
         };
 
-        console.log(`Block verified: ${JSON.stringify(block)}`);
+        console.log(`Block mined: ${JSON.stringify(block)}`);
 
-        // Clear the transaction pool immediately after mining
-        transactionPool = transactionPool.filter(tx => !validTransactions.includes(tx));
-
-        // Directly update balances before sending the block
-        updateLocalBalances(validTransactions);
-
+        // Send the newly mined block to the central server
         ws.send(JSON.stringify({ type: 'block', block }));
-        console.log('Block sent to central server');
-        canMine = false;
+        console.log('Block sent to central server, waiting for confirmation');
     }
 
+    function handleReceivedBlock(newBlock) {
+        const lastBlock = blockchain[blockchain.length - 1];
 
-    // Function to update local balances based on transactions in the received block
+        console.log('Received block:', newBlock);
+        console.log('Current last block:', lastBlock);
+
+        if (lastBlock && lastBlock.hash === newBlock.previousHash && newBlock.index === lastBlock.index + 1) {
+            blockchain.push(newBlock);
+            updateLocalBalances(newBlock.transactions);
+            console.log('New block added to the chain:', newBlock);
+
+            // Remove transactions from transaction pool that are in the new block
+            transactionPool = transactionPool.filter(tx => !newBlock.transactions.includes(tx));
+
+            console.log('Updated transaction pool after block acceptance:', transactionPool);
+
+            // Start mining the next block
+            miningInterval = setTimeout(mineBlock, miningIntervalTime);  // Adjust the interval as needed
+        } else {
+            console.log('Invalid block rejected');
+        }
+    }
+
     function updateLocalBalances(transactions) {
         transactions.forEach(tx => {
             const { publicKey, recipient, amount } = tx;
 
             const sender = publicKeyToAddress(publicKey);
-            console.log("Sender:", sender);
             if (sender === undefined) {
                 console.log('Invalid sender address');
                 return;
             }
 
-            // Deduct the amount from the sender's balance
             if (balances[sender] !== undefined) {
                 balances[sender] -= amount;
             }
 
-            // Add the amount to the recipient's balance
             if (balances[recipient] !== undefined) {
                 balances[recipient] += amount;
             } else {
@@ -266,9 +239,8 @@ function launchServer() {
         console.log('Updated local balances:', balances);
     }
 
-    // Function to handle receiving a new transaction
     function handleTransaction(transaction) {
-        if (validateTransaction(transaction)) {
+        if (validateTransaction(transaction, balances)) {
             transactionPool.push(transaction);
             console.log('Transaction added to local pool and broadcasting to central server');
 
@@ -279,9 +251,7 @@ function launchServer() {
         }
     }
 
-    // Function to create and send a new transaction
     function sendTransaction(recipient, amount, privateKey) {
-        // Derive the public key from the private key
         const key = ec.keyFromPrivate(privateKey, 'hex');
         const publicKey = key.getPublic().encode('hex');
         const senderAddress = publicKeyToAddress(publicKey);
@@ -291,21 +261,9 @@ function launchServer() {
             return;
         }
 
-
-        const transaction = {
-            publicKey,  // Use the public key as the sender
-            recipient,
-            amount,
-            timestamp: Date.now()
-        };
-
-        const transactionData = publicKey + recipient + amount + transaction.timestamp;
-        const signature = key.sign(crypto.createHash('sha256').update(transactionData).digest()).toDER('hex');
-
-        transaction.signature = signature;
-
-        // Handle and broadcast the transaction
+        const transaction = createTransaction(publicKey, recipient, amount, privateKey);
         handleTransaction(transaction);
     }
-}
 
+    setTimeout(mineBlock, miningIntervalTime);  // Start mining a block after a delay
+}
