@@ -15,16 +15,21 @@ function publicKeyToAddress(publicKey) {
     return ripemd160;
 }
 
-function createTransaction(publicKey, recipient, amount, privateKey) {
+function createTransaction(publicKey, senderAddress, recipient, amount, privateKey) {
     const key = ec.keyFromPrivate(privateKey, 'hex');
+
+    //convert string amount to number
+    amount = parseFloat(amount);
+
     const transaction = {
         publicKey,
+        senderAddress,
         recipient,
         amount,
         timestamp: Date.now(),
     };
 
-    const transactionData = publicKey + recipient + amount + transaction.timestamp;
+    const transactionData = publicKey + senderAddress + recipient + amount + transaction.timestamp;
     const transactionHash = crypto.createHash('sha256').update(transactionData).digest('hex');
     const signature = key.sign(crypto.createHash('sha256').update(transactionData).digest()).toDER('hex');
 
@@ -34,11 +39,11 @@ function createTransaction(publicKey, recipient, amount, privateKey) {
 }
 
 function validateTransaction(transaction, balances) {
-    const { publicKey, recipient, amount, timestamp, signature } = transaction;
+    const { publicKey, senderAddress , recipient, amount, timestamp, signature } = transaction;
     const key = ec.keyFromPublic(publicKey, 'hex');
-    const isValid = key.verify(crypto.createHash('sha256').update(publicKey + recipient + amount + timestamp).digest(), signature);
+    const isValid = key.verify(crypto.createHash('sha256').update(publicKey + senderAddress + recipient + amount + timestamp).digest(), signature);
 
-    const senderAddress = publicKeyToAddress(publicKey);
+    
     if (balances[senderAddress] === undefined || balances[senderAddress] < amount) {
         return false;
     }
