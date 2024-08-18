@@ -1,11 +1,11 @@
-import { Wallet } from "@/components/appComp";
+import { Wallet, WalletContainer } from "@/components/appComp";
+import { useAppStore } from "@/store";
 
 const Home = () => {
-  return (
-    <>
-      <Wallet />
-    </>
-  );
+  const { wallet } = useAppStore((state) => ({
+    wallet: state.wallet,
+  }));
+  return <>{wallet ? <WalletContainer /> : <Wallet />}</>;
 };
 
 export default Home;

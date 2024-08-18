@@ -1,8 +1,12 @@
 import { Button } from "@/components/UI";
+import { useAppStore } from "@/store";
 import { generateBitcoinWallet } from "@/utils/utils";
 import { IoWalletOutline } from "react-icons/io5";
 
 const Wallet = () => {
+  const { setWallet } = useAppStore((state) => ({
+    setWallet: state.setWallet,
+  }));
   const handleGererateWallet = () => {
     const res = generateBitcoinWallet();
     if (res.mnemonic && res.publicKey && res.privateKey) {
@@ -11,7 +15,7 @@ const Wallet = () => {
         publicKey: res.publicKey,
         privateKey: res.privateKey,
       };
-      localStorage.setItem("BC-Wallet", JSON.stringify(myWallet));
+      setWallet(myWallet);
     }
   };
 
