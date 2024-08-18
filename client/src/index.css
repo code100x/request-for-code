@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: "General Sans", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #090909;
+  color: #fff;
+}
+
+.glass__bg {
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(10px);
+}
