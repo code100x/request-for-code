@@ -17,7 +17,25 @@ export declare global {
     vout: number;
     address: string;
     amount: number;
-    script: string;
-    rawTx: string;
+  }
+
+  interface ITx {
+    id: string;
+    inputs: IUTXO[];
+    outputs: {
+      address: string;
+      amount: number;
+    }[];
+    publicKey: string;
+    signature: string;
+    timestamp: number;
+  }
+  interface IBlock {
+    hash: string;
+    index: number;
+    nonce: number;
+    previousHash: string;
+    timestamp: number;
+    transactions: ITx[];
   }
 }

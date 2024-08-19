@@ -1,12 +1,8 @@
 const WebSocket = require("ws");
 const crypto = require("crypto");
-const bitcoin = require("bitcoinjs-lib");
-const ecc = require("tiny-secp256k1");
-const { ECPairFactory } = require("ecpair");
+const { CENTRAL_CONFIG } = require("./utils/constant");
+const { isValidTransaction, isValidNewBlock } = require("./utils/utils");
 
-const ECPair = ECPairFactory(ecc);
-
-const network = bitcoin.networks.testnet;
 const port = 8080;
 const server = new WebSocket.Server({ port });
 
@@ -15,150 +11,12 @@ const mempool = [];
 const clients = new Set();
 let utxoSet = new Map();
 
-const INITIAL_BALANCE = 100 * 100000000; // 100 BTC in satoshis
-const BLOCK_REWARD = 50 * 100000000; // 50 BTC in satoshis
-const DIFFICULTY = 4; // Number of leading zeros required in hash
-const MAX_MESSAGE_SIZE = 1024 * 1024; // 1MB max message size
-const MAX_MEMPOOL_SIZE = 1000; // Maximum number of transactions in mempool
-
 function broadcastMessage(message) {
   clients.forEach((client) => {
     if (client.readyState === WebSocket.OPEN) {
       client.send(JSON.stringify(message));
     }
   });
-}
-
-function calculateBlockHash(block) {
-  const data =
-    block.index +
-    block.previousHash +
-    block.timestamp +
-    JSON.stringify(block.transactions) +
-    block.nonce;
-  return crypto.createHash("sha256").update(data).digest("hex");
-}
-
-function isValidProofOfWork(block) {
-  const hash = calculateBlockHash(block);
-  return hash.startsWith("0".repeat(DIFFICULTY)) && hash === block.hash;
-}
-
-function isValidBlockStructure(block) {
-  return (
-    typeof block.index === "number" &&
-    typeof block.hash === "string" &&
-    typeof block.previousHash === "string" &&
-    typeof block.timestamp === "number" &&
-    Array.isArray(block.transactions) &&
-    typeof block.nonce === "number"
-  );
-}
-
-function isValidNewBlock(newBlock, previousBlock) {
-  if (!isValidBlockStructure(newBlock)) {
-    console.log("Invalid block structure");
-    return false;
-  }
-  if (!isValidProofOfWork(newBlock)) {
-    console.log("Invalid proof of work");
-    return false;
-  }
-
-  if (newBlock.index === 0) {
-    return true; // Genesis block is always valid
-  }
-
-  if (previousBlock.index + 1 !== newBlock.index) {
-    console.log("Invalid index");
-    return false;
-  }
-  if (previousBlock.hash !== newBlock.previousHash) {
-    console.log("Invalid previous hash");
-    return false;
-  }
-
-  return true;
-}
-
-function isValidAddress(address) {
-  try {
-    bitcoin.address.toOutputScript(address, network);
-    return true;
-  } catch (e) {
-    console.log("Invalid address error:", e);
-    return false;
-  }
-}
-
-function isValidTransaction(transaction, utxoSet) {
-  if (!transaction) {
-    console.log("No transaction data");
-    return false;
-  }
-
-  if (
-    !transaction.inputs ||
-    !transaction.outputs ||
-    !Array.isArray(transaction.inputs) ||
-    !Array.isArray(transaction.outputs)
-  ) {
-    console.log("Invalid transaction structure 0");
-    return false;
-  }
-
-  // Check if all inputs are unspent
-  for (const input of transaction.inputs) {
-    const utxoKey = `${input.txid}:${input.vout}`;
-    if (!utxoSet.has(utxoKey)) {
-      return false;
-    }
-  }
-
-  try {
-    const { signature, publicKey, ...transactionData } = transaction;
-    const transactionBuffer = Buffer.from(JSON.stringify(transactionData));
-    const sigHash = bitcoin.crypto.hash256(transactionBuffer);
-
-    const signatureBuffer = Buffer.from(signature, "hex");
-    const publicKeyBuffer = Buffer.from(publicKey, "hex");
-
-    const pubKeyPair = ECPair.fromPublicKey(publicKeyBuffer);
-
-    if (!pubKeyPair.verify(sigHash, signatureBuffer)) {
-      console.log("Invalid signature");
-      return false;
-    }
-  } catch (e) {
-    console.log("Error verifying signature:", e);
-    return false;
-  }
-
-  // Check if total input amount is greater than or equal to total output amount
-  const totalInput = transaction.inputs.reduce((sum, input) => {
-    const utxo = utxoSet.get(`${input.txid}:${input.vout}`);
-    return sum + utxo.amount;
-  }, 0);
-
-  const totalOutput = transaction.outputs.reduce(
-    (sum, output) => sum + output.amount,
-    0
-  );
-
-  if (totalInput < totalOutput) {
-    console.log("Invalid transaction amount");
-    return false;
-  }
-
-  // Check if all output addresses are valid
-  for (const output of transaction.outputs) {
-    if (!isValidAddress(output.address)) {
-      console.log("Invalid output address");
-      return false;
-    }
-  }
-
-  return true;
 }
 
 function updateUTXOSet(block) {
@@ -215,7 +73,7 @@ function createInitialTransaction(address) {
     outputs: [
       {
         address: address,
-        amount: INITIAL_BALANCE,
+        amount: CENTRAL_CONFIG.INITIAL_BALANCE,
       },
     ],
   };
@@ -229,7 +87,7 @@ function createInitialTransaction(address) {
     txid: transaction.id,
     vout: 0,
     address: address,
-    amount: INITIAL_BALANCE,
+    amount: CENTRAL_CONFIG.INITIAL_BALANCE,
   });
 
   return transaction;
@@ -249,7 +107,7 @@ function fundWallet(address) {
 }
 
 function addToMempool(transaction) {
-  if (mempool.length >= MAX_MEMPOOL_SIZE) {
+  if (mempool.length >= CENTRAL_CONFIG.MAX_MEMPOOL_SIZE) {
     // Remove oldest transaction if mempool is full
     mempool.shift();
   }
@@ -260,7 +118,7 @@ server.on("connection", (ws) => {
   clients.add(ws);
 
   ws.on("message", (message) => {
-    if (message.length > MAX_MESSAGE_SIZE) {
+    if (message.length > CENTRAL_CONFIG.MAX_MESSAGE_SIZE) {
       console.log("Received message exceeds size limit");
       return;
     }
@@ -313,7 +171,7 @@ server.on("connection", (ws) => {
           JSON.stringify({
             type: "WALLET_CREATED",
             address: data.address,
-            balance: INITIAL_BALANCE,
+            balance: CENTRAL_CONFIG.INITIAL_BALANCE,
           })
         );
         break;

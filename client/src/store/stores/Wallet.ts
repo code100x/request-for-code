@@ -14,6 +14,7 @@ export interface IWalletState {
   initWsClient: () => void;
   listenEvents: () => void;
   sendEventRequest: () => void;
+  allBlocks: IBlock[];
   isSocketConnected: boolean;
 }
 
@@ -24,6 +25,7 @@ export const initialWalletState = {
   utxos: [],
   isSocketConnected: false,
   walletBalance: 0,
+  allBlocks: [],
 };
 
 export const createWalletSlice: StateCreator<AppState, [], [], IWalletState> = (
@@ -88,10 +90,7 @@ export const createWalletSlice: StateCreator<AppState, [], [], IWalletState> = (
     if (wsClient && wallet) {
       wsClient.onmessage = (event) => {
         const data = JSON.parse(event.data);
-        if (data.type === "TRANSACTION") {
-          const transactions = [...get().transactions, data.transaction];
-          set({ transactions });
-        }
+
         if (data.type === "UTXO_SET") {
           console.log("UTXO_SET", data);
 
