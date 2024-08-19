@@ -1,4 +1,4 @@
-require("dotenv").config();
+import "dotenv/config";
 
 module.exports = {
   PORT: process.env.PORT || 3001,

@@ -2,7 +2,7 @@
   "name": "miner-server",
   "version": "1.0.0",
   "description": "miner-server",
-  "main": "index.js",
+  "main": "serve.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },

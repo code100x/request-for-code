@@ -52,7 +52,7 @@ const useBlockchainData = () => {
     // Set up the new interval
     intervalRef.current = setInterval(() => {
       updateDashboard(blockchainService);
-    }, 1000);
+    }, 5000);
 
     // Cleanup function
     return () => {
