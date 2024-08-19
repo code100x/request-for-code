@@ -1,9 +1,13 @@
-import { Button } from "@/components/UI";
 import ShowWallet from "./wallet.show";
 import SignTransactions from "./wallet.signTx";
-import { FaPlus } from "react-icons/fa6";
+import TransactionTable from "../TransactionTable";
+import { useAppStore } from "@/store";
 
 const WalletContainer = () => {
+  const { myTransactions } = useAppStore((state) => ({
+    myTransactions: state.myTransactions,
+  }));
+  console.log("myTransactions", myTransactions);
   return (
     <>
       <div className="flex lg:flex-row flex-col gap-4 mt-20">
@@ -14,15 +18,11 @@ const WalletContainer = () => {
           <SignTransactions />
         </div>
       </div>
-      {/* <div className="flex flex-col mt-6 border border-primary/5 h-48 rounded-xl px-6 py-8">
-        <div className="flex justify-between items-center">
-          <p className="font-medium">All Generated Addresses</p>
-          <Button className="text-sm">
-            <FaPlus className="mr-2" />
-            New Address
-          </Button>
-        </div>
-      </div> */}
+      <div className="flex flex-col mt-10 mb-20">
+        <p className="font-medium text-lg">My Transactions</p>
+
+        <TransactionTable transcations={myTransactions} />
+      </div>
     </>
   );
 };

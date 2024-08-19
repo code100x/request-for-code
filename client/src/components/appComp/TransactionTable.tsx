@@ -1,3 +1,4 @@
+import { formatAddress, formatAmount } from "@/utils/customFn";
 import { FC } from "react";
 import { IoDocumentTextOutline } from "react-icons/io5";
 
@@ -11,51 +12,51 @@ const TransactionTable: FC<IUserTable> = ({ transcations }) => {
       <div className="mt-4 flex flex-col">
         <div className="-my-2 -mx-4 overflow-x-auto sm:-mx-6 lg:-mx-8">
           <div className="inline-block min-w-full py-2 align-middle md:px-6 lg:px-8">
-            <div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 md:rounded-lg">
-              <table className="min-w-full divide-y divide-gray-300">
-                <thead className="bg-gray-50">
-                  <tr>
+            <div className="overflow-hidden md:rounded-lg">
+              <table className="min-w-full divide-y divide-white/5">
+                <thead className="bg-white/5">
+                  <tr className="text-white/50">
                     <th
                       scope="col"
-                      className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-6"
+                      className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold sm:pl-6"
                     >
                       Transaction Hash
                     </th>
                     <th
                       scope="col"
-                      className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900"
+                      className="px-3 py-3.5 text-left text-sm font-semibold"
                     >
                       from Address
                     </th>
                     <th
                       scope="col"
-                      className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900"
+                      className="px-3 py-3.5 text-left text-sm font-semibold"
                     >
                       to Address
                     </th>
                     <th
                       scope="col"
-                      className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900"
+                      className="px-3 py-3.5 text-left text-sm font-semibold"
                     >
                       Amount
                     </th>
                     <th
                       scope="col"
-                      className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900"
+                      className="px-3 py-3.5 text-left text-sm font-semibold"
                     >
                       Created At
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200 bg-white">
+                <tbody className="divide-y divide-white/5 bg-white/5">
                   {/* If loading is true, show loading spinner */}
 
                   {/* If users is empty, show no data */}
                   {transcations.length === 0 && (
                     <tr>
-                      <td colSpan={4}>
+                      <td colSpan={5}>
                         <div className="flex justify-center items-center p-4">
-                          <p className="text-gray-500">No data found</p>
+                          <p className="text-white">No data found</p>
                         </div>
                       </td>
                     </tr>
@@ -65,29 +66,28 @@ const TransactionTable: FC<IUserTable> = ({ transcations }) => {
                     transcations.map((tx, idx) => (
                       <tr key={idx}>
                         <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm sm:pl-6">
-                          <div className="flex items-center">
-                            <div className="h-10 w-10 flex-shrink-0">
+                          <div className="flex items-center gap-2">
+                            <div className="text-lg shrink-0">
                               <IoDocumentTextOutline />
                             </div>
-                            <div className="ml-4">
-                              <div className="font-medium text-gray-900">
-                                {tx.id}
-                              </div>
-                              {/* <div className="text-gray-500">{user.email}</div> */}
-                            </div>
+                            <p className="font-medium text-primary">
+                              {tx.id.substring(0, 20)}...
+                            </p>
                           </div>
                         </td>
-                        <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
-                          {tx.inputs[0].address}
+                        <td className="whitespace-nowrap px-3 py-4 text-sm text-primary">
+                          {tx.inputs.length === 0
+                            ? "topup"
+                            : formatAddress(tx.inputs[0].address)}
                         </td>
-                        <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
-                          {tx.outputs[0].address}
+                        <td className="whitespace-nowrap px-3 py-4 text-sm text-primary">
+                          {formatAddress(tx.outputs[0].address)}
                         </td>
-                        <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
-                          {tx.outputs[0].amount}
+                        <td className="whitespace-nowrap px-3 py-4 text-sm text-primary">
+                          {formatAmount(tx.outputs[0].amount)} BTC
                         </td>
-                        <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
-                          {new Date(tx.timestamp).toLocaleString()}
+                        <td className="whitespace-nowrap px-3 py-4 text-sm text-primary">
+                          {new Date(tx.timestamp).toLocaleDateString()}
                         </td>
                       </tr>
                     ))}

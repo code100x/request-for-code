@@ -33,6 +33,7 @@ const SignTransactions = () => {
           txid: utxo.txid,
           vout: utxo.vout,
           amount: utxo.amount,
+          address: utxo.address,
         })),
         outputs: [
           { address: receipient, amount: amountInSatoshis },

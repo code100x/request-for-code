@@ -83,16 +83,13 @@ function connectToServer() {
         if (addBlockToChain(data.block)) {
           console.log("*****Added new block to chain*****", data.block.index);
           // Remove transactions in the new block from our mempool
-          mempool = mempool.filter(
-            (tx) =>
-              !data.block.transactions.some((blockTx) => blockTx.id === tx.id)
-          );
         }
         break;
       case "NEW_TRANSACTION":
         console.log("************verifying transaction************");
         if (isValidTransaction(data.transaction, utxoSet)) {
           mempool.push(data.transaction);
+          updateLocalUTXOSet(data.transaction);
         }
         break;
       case "NEW_CHAIN":
@@ -120,6 +117,36 @@ function connectToServer() {
   });
 }
 
+function updateLocalUTXOSet(transactionOrTransactions) {
+  const transactions = Array.isArray(transactionOrTransactions)
+    ? transactionOrTransactions
+    : [transactionOrTransactions];
+
+  transactions.forEach((transaction) => {
+    // Remove spent outputs
+    transaction.inputs.forEach((input) => {
+      const utxoKey = `${input.txid}:${input.vout}`;
+      utxoSet.delete(utxoKey);
+    });
+
+    // Add new unspent outputs
+    transaction.outputs.forEach((output, index) => {
+      const utxoKey = `${transaction.id}:${index}`;
+      utxoSet.set(utxoKey, {
+        txid: transaction.id,
+        vout: index,
+        address: output.address,
+        amount: output.amount,
+      });
+    });
+  });
+}
+
+function removeTransactionsFromMempool(transactions) {
+  const transactionIds = new Set(transactions.map((tx) => tx.id));
+  mempool = mempool.filter((tx) => !transactionIds.has(tx.id));
+}
+
 function checkStartMining() {
   if (hasReceivedBlockchain && hasReceivedUTXOSet && !isMining) {
     startMining();
@@ -132,7 +159,7 @@ function cleanupMempool() {
     (tx) => currentTime - tx.timestamp < 24 * 60 * 60 * 1000
   ); // Remove transactions older than 24 hours
 }
-setInterval(cleanupMempool, 60 * 60 * 1000); //
+setInterval(cleanupMempool, 1000 * 60 * 30); // Cleanup mempool every 30 minutes
 
 function mineBlock() {
   adjustDifficulty();
@@ -141,7 +168,7 @@ function mineBlock() {
   const newBlock = {
     index: lastBlock ? lastBlock.index + 1 : 0,
     timestamp: Date.now(),
-    transactions: selectTransactionsForBlock().map((tx) => tx.toHex()),
+    transactions: selectTransactionsForBlock(),
     previousHash: lastBlock ? lastBlock.hash : "0".repeat(64),
     nonce: 0,
   };
@@ -151,6 +178,7 @@ function mineBlock() {
     id: crypto.randomBytes(32).toString("hex"),
     inputs: [],
     outputs: [{ address: minerAddress, amount: MINER_CONFIG.BLOCK_REWARD }],
+    timestamp: Date.now(),
   };
   newBlock.transactions.unshift(coinbaseTx);
 
@@ -162,8 +190,8 @@ function mineBlock() {
     newBlock.nonce++;
   }
   console.log("***** Mined new block****", newBlock.index);
-  ws.send(JSON.stringify({ type: "NEW_BLOCK", block: newBlock }));
-  //   addBlockToChain(newBlock);
+  ws.send(JSON.stringify({ type: "NEW_BLOCK", block: newBlock, difficulty }));
+  // addBlockToChain(newBlock);
 }
 
 function selectTransactionsForBlock() {
@@ -193,36 +221,11 @@ function addBlockToChain(newBlock) {
   ) {
     console.log("Adding new block to chain", newBlock.index);
     blockchain.push(newBlock);
-    updateUTXOSet(newBlock);
+    updateLocalUTXOSet(newBlock.transactions);
+    removeTransactionsFromMempool(newBlock.transactions);
     return true;
   }
   return false;
-}
-
-function updateUTXOSet(block) {
-  // Remove spent outputs
-  block.transactions.forEach((tx, txIndex) => {
-    if (txIndex > 0) {
-      // Skip coinbase transaction
-      tx.inputs.forEach((input) => {
-        const utxoKey = `${input.txid}:${input.vout}`;
-        utxoSet.delete(utxoKey);
-      });
-    }
-  });
-
-  // Add new unspent outputs
-  block.transactions.forEach((tx) => {
-    tx.outputs.forEach((output, index) => {
-      const utxoKey = `${tx.id}:${index}`;
-      utxoSet.set(utxoKey, {
-        txid: tx.id,
-        vout: index,
-        address: output.address,
-        amount: output.amount,
-      });
-    });
-  });
 }
 
 // Generate a new address for the miner
@@ -240,7 +243,12 @@ function startMining() {
 function miningLoop() {
   if (!isMining) return;
   mineBlock();
-  setTimeout(miningLoop, 1000 * 60); // Mine a new block every 1 minute
+  // if (mempool.length > 0) {
+  //   mineBlock();
+  // } else {
+  //   console.log("No transactions in mempool, waiting...");
+  // }
+  setTimeout(miningLoop, 1000 * 60); // Mine a new block every 5 minutes
 }
 // Start the miner
 connectToServer();
