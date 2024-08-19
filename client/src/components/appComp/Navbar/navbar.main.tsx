@@ -13,6 +13,9 @@ const Navbar = () => {
           <Link to="/blockchain" title="" className="font-semibold">
             Blockchain
           </Link>
+          <Link to="/blocks" title="" className="font-semibold">
+            Blocks
+          </Link>
         </div>
       </div>
     </nav>

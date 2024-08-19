@@ -79,6 +79,11 @@ const isValidChain = (chainToValidate, difficulty) => {
 };
 
 const isValidTransaction = (transaction, utxoSet) => {
+  // Special case for initial balance transactions
+  if (transaction.inputs.length === 0 && transaction.outputs.length === 1) {
+    return true;
+  }
+
   if (
     !transaction.inputs ||
     !transaction.outputs ||
@@ -87,26 +92,23 @@ const isValidTransaction = (transaction, utxoSet) => {
     !transaction.signature ||
     !transaction.publicKey
   ) {
+    console.log("Invalid transaction structure");
     return false;
   }
 
-  // Special case for initial balance transactions
-  if (transaction.inputs.length === 0 && transaction.outputs.length === 1) {
-    return true;
-  }
   // Check if all inputs are unspent
   for (const input of transaction.inputs) {
     const utxoKey = `${input.txid}:${input.vout}`;
     if (!utxoSet.has(utxoKey)) {
+      console.log("Input not found in UTXO set");
       return false;
     }
   }
 
   try {
-    const { signature, publicKey, ...transactionData } = transaction;
+    const { signature, publicKey, id, ...transactionData } = transaction;
     const transactionBuffer = Buffer.from(JSON.stringify(transactionData));
     const sigHash = bitcoin.crypto.hash256(transactionBuffer);
-
     const signatureBuffer = Buffer.from(signature, "hex");
     const publicKeyBuffer = Buffer.from(publicKey, "hex");
 
@@ -132,6 +134,7 @@ const isValidTransaction = (transaction, utxoSet) => {
   );
 
   if (totalInput < totalOutput) {
+    console.log("Invalid transaction amount");
     return false;
   }
 

@@ -40,7 +40,7 @@ const SignTransactions = () => {
           {
             address: wallet.publicKey,
             amount: walletBalance - amountInSatoshis,
-          }, // Change
+          },
         ],
         timestamp: Date.now(),
       };

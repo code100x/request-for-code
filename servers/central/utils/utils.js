@@ -99,7 +99,7 @@ function isValidTransaction(transaction, utxoSet) {
   }
 
   try {
-    const { signature, publicKey, ...transactionData } = transaction;
+    const { signature, publicKey, id, ...transactionData } = transaction;
     const transactionBuffer = Buffer.from(JSON.stringify(transactionData));
     const sigHash = bitcoin.crypto.hash256(transactionBuffer);
 

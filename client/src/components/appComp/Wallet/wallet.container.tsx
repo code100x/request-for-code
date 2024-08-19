@@ -7,7 +7,6 @@ const WalletContainer = () => {
   const { myTransactions } = useAppStore((state) => ({
     myTransactions: state.myTransactions,
   }));
-  console.log("myTransactions", myTransactions);
   return (
     <>
       <div className="flex lg:flex-row flex-col gap-4 mt-20">

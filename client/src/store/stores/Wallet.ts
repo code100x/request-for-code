@@ -139,9 +139,10 @@ export const createWalletSlice: StateCreator<AppState, [], [], IWalletState> = (
         }
 
         if (data.type === "NEW_TRANSACTION") {
-          console.log("New transaction", data);
-          const { blockStats } = get();
+          const { blockStats, allTransactions } = get();
+
           set({
+            allTransactions: [data.transaction, ...allTransactions],
             blockStats: {
               ...blockStats,
               totalTransactions: data.totalTransactions,
@@ -149,9 +150,9 @@ export const createWalletSlice: StateCreator<AppState, [], [], IWalletState> = (
           });
         }
         if (data.type === "NEW_BLOCK") {
-          console.log("New block", data);
-          const { blockStats } = get();
+          const { blockStats, allBlocks } = get();
           set({
+            allBlocks: [data.block, ...allBlocks],
             blockStats: {
               ...blockStats,
               totalBlocks: data.block.index + 1,

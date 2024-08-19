@@ -88,17 +88,9 @@ function connectToServer() {
       case "NEW_TRANSACTION":
         console.log("************verifying transaction************");
         if (isValidTransaction(data.transaction, utxoSet)) {
+          console.log("Received valid transaction", mempool);
           mempool.push(data.transaction);
           updateLocalUTXOSet(data.transaction);
-        }
-        break;
-      case "NEW_CHAIN":
-        if (
-          isValidChain(data.blockchain, difficulty) &&
-          data.blockchain.length > blockchain.length
-        ) {
-          blockchain = data.blockchain;
-          console.log("Updated to new longer chain");
         }
         break;
     }
@@ -248,7 +240,7 @@ function miningLoop() {
   // } else {
   //   console.log("No transactions in mempool, waiting...");
   // }
-  setTimeout(miningLoop, 1000 * 60); // Mine a new block every 5 minutes
+  setTimeout(miningLoop, 1000 * 60 * 2); // Mine a new block every 2 minutes
 }
 // Start the miner
 connectToServer();

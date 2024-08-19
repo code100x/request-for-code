@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Navbar } from "@/components/appComp";
-import { BlockChainStats, Home } from "@/Pages";
+import { Block, BlockChainStats, Home } from "@/Pages";
 import { useAppStore } from "./store";
 import { useEffect } from "react";
 import { Toaster } from "sonner";
@@ -49,6 +49,7 @@ const App = () => {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/blockchain" element={<BlockChainStats />} />
+          <Route path="/blocks" element={<Block />} />
         </Routes>
       </main>
     </BrowserRouter>

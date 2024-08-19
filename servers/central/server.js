@@ -105,7 +105,8 @@ function processNewTransaction(transaction) {
     console.log("Server - Transaction is valid");
     const transactionId = crypto.randomBytes(32).toString("hex");
     transaction.id = transactionId;
-    transaction.timestamp = Date.now();
+
+    if (!transaction.timestamp) transaction.timestamp = Date.now();
     updateUTXOSet(transaction);
     addToMempool(transaction);
 
