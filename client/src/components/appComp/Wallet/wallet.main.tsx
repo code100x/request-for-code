@@ -4,8 +4,9 @@ import { generateBitcoinWallet } from "@/utils/utils";
 import { IoWalletOutline } from "react-icons/io5";
 
 const Wallet = () => {
-  const { setWallet } = useAppStore((state) => ({
+  const { setWallet, wsClient } = useAppStore((state) => ({
     setWallet: state.setWallet,
+    wsClient: state.wsClient,
   }));
   const handleGererateWallet = () => {
     const res = generateBitcoinWallet();
@@ -16,6 +17,14 @@ const Wallet = () => {
         privateKey: res.privateKey,
       };
       setWallet(myWallet);
+      if (wsClient) {
+        wsClient.send(
+          JSON.stringify({
+            type: "CREATE_WALLET",
+            address: myWallet.publicKey,
+          })
+        );
+      }
     }
   };
 

@@ -1,13 +1,14 @@
 import { Button } from "@/components/UI";
 import { useAppStore } from "@/store";
-import { formatAddress } from "@/utils/customFn";
+import { formatAddress, formatAmount } from "@/utils/customFn";
 import { useState } from "react";
 import { LuCopy } from "react-icons/lu";
 import { toast } from "sonner";
 
 const ShowWallet = () => {
-  const { wallet } = useAppStore((state) => ({
+  const { wallet, walletBalance } = useAppStore((state) => ({
     wallet: state.wallet,
+    walletBalance: state.walletBalance,
   }));
   const [show, setShow] = useState(false);
   const [showSeed, setShowSeed] = useState(false);
@@ -30,6 +31,15 @@ const ShowWallet = () => {
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-1">
+        <p className="text-white/60 text-sm font-medium">Balance</p>
+        <div className="flex items-center gap-2">
+          <p className="font-semibold text-3xl">
+            {formatAmount(walletBalance)}{" "}
+            <span className="text-white/60 text-sm">BTC</span>
+          </p>
+        </div>
+      </div>
+      <div className="flex flex-col gap-1">
         <p className="text-white/60 text-sm font-medium">Address</p>
         <div className="flex items-center gap-2">
           <p className="font-semibold">
@@ -48,11 +58,11 @@ const ShowWallet = () => {
           onMouseLeave={() => setShow(false)}
         >
           {show ? (
-            <p className="font-semibold">
+            <p className="font-semibold h-6">
               {formatAddress(wallet?.privateKey as string, 10)}
             </p>
           ) : (
-            <p className="font-semibold text-xl">**********************</p>
+            <p className="font-semibold text-xl h-6">**********************</p>
           )}
 
           <button onClick={copyPrivateKey}>

@@ -1,3 +1,4 @@
+import { Loader } from "@/components/appComp";
 import clsx from "clsx";
 import { forwardRef } from "react";
 
@@ -8,6 +9,11 @@ interface ButtonOptions {
    * @type ButtonVariant
    */
   variant?: ButtonVariant;
+
+  /**
+   * show loading state
+   */
+  loading?: boolean;
 }
 
 type Ref = HTMLButtonElement;
@@ -27,7 +33,7 @@ const colorMap = {
 } as Record<ButtonVariant, string>;
 
 const Button = forwardRef<Ref, ButtonProps>((props, ref) => {
-  const { variant = "solid", className, children, ...rest } = props;
+  const { variant = "solid", className, loading, children, ...rest } = props;
 
   const merged = clsx(
     "inline-flex items-center justify-center px-6 py-2 text-base font-medium transition-all duration-200 rounded-lg focus:outline-none disabled:opacity-70 disabled:cursor-not-allowed",
@@ -37,7 +43,12 @@ const Button = forwardRef<Ref, ButtonProps>((props, ref) => {
 
   return (
     <button ref={ref} className={merged} {...rest}>
-      {children}
+      {children}{" "}
+      {loading && (
+        <span className="ml-2">
+          <Loader />
+        </span>
+      )}
     </button>
   );
 });

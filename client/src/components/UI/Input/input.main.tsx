@@ -74,22 +74,22 @@ const Input = (props: InputOptions) => {
     <div className={wrapperClassName}>
       <label
         htmlFor={id}
-        className="text-gray-800 text-sm placeholder-gray-800"
+        className="text-primary/80 font-medium text-sm placeholder-primary/50"
       >
         {label} {required && <span className="text-red">*</span>}
       </label>
       <div
-        className={`border transition duration-150 ease-in-out rounded-lg mt-1 ${
+        className={`border border-primary/10 transition duration-150 ease-in-out rounded-lg mt-1 ${
           error
             ? "focus-within:border-red-600 border-red-600"
-            : "focus-within:border-gray-700"
+            : "focus-within:border-primary/30"
         }`}
         onClick={() => inputRef?.current?.focus()}
       >
         <input
           ref={inputRef}
           type={type}
-          className="w-full px-2 h-10 text-gray-900 outline-none text-base rounded-md"
+          className="w-full px-2 h-10 font-medium text-sm text-primary bg-transparent outline-none rounded-md"
           id={id}
           placeholder={placeholder}
           {...rest}

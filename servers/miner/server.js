@@ -1,303 +1,376 @@
 const WebSocket = require("ws");
 const crypto = require("crypto");
-const secp256k1 = require("secp256k1");
+const bitcoin = require("bitcoinjs-lib");
+const { BIP32Factory } = require("bip32");
+const ecc = require("tiny-secp256k1");
 
-const BLOCK_REWARD = 10;
+const { ECPairFactory } = require("ecpair");
+const ECPair = ECPairFactory(ecc);
 
-const CENTRAL_SERVER = "ws://localhost:8080";
-const DIFFICULTY = 4; // Number of leading zeros required in block hash
+const bip32 = BIP32Factory(ecc);
+
+const centralServerUrl = "ws://localhost:8080";
+let ws;
 
 let blockchain = [];
 let mempool = [];
 let utxoSet = new Map();
 
-const ws = new WebSocket(CENTRAL_SERVER);
+const BLOCK_REWARD = 50 * 100000000; // 50 BTC in satoshis
+const DIFFICULTY = 4; // Number of leading zeros required in hash
 
-ws.on("open", () => {
-  console.log("Connected to central server");
-  startMining();
-});
+let isMining = false;
+let hasReceivedBlockchain = false;
+let hasReceivedUTXOSet = false;
 
-ws.on("message", (message) => {
-  const msg = JSON.parse(message);
+let difficulty = DIFFICULTY;
+function adjustDifficulty() {
+  const BLOCK_TIME = 60000; // 1 minute in milliseconds
+  const ADJUSTMENT_FACTOR = 0.25;
 
-  switch (msg.type) {
-    case "BLOCKCHAIN":
-      blockchain = msg.data;
-      break;
-    case "NEW_BLOCK":
-      if (verifyBlock(msg.data)) {
-        blockchain.push(msg.data);
-        // Remove mined transactions from mempool
-        mempool = mempool.filter((tx) => !msg.data.transactions.includes(tx));
-      }
-      break;
-    case "NEW_TRANSACTION":
-      mempool.push(msg.data);
-      break;
-  }
-});
+  if (blockchain.length > 1) {
+    const lastBlock = blockchain[blockchain.length - 1];
+    const prevBlock = blockchain[blockchain.length - 2];
+    const timeElapsed = lastBlock.timestamp - prevBlock.timestamp;
 
-function startMining() {
-  setInterval(() => {
-    if (mempool.length > 0) {
-      const block = createBlock();
-      if (mineBlock(block)) {
-        ws.send(JSON.stringify({ type: "NEW_BLOCK", data: block }));
-      }
+    if (timeElapsed < BLOCK_TIME * (1 - ADJUSTMENT_FACTOR)) {
+      difficulty++;
+    } else if (timeElapsed > BLOCK_TIME * (1 + ADJUSTMENT_FACTOR)) {
+      difficulty = Math.max(1, difficulty - 1);
     }
-  }, 10000); // Try to mine a block every 10 seconds
+  }
 }
 
-function createBlock() {
-  const previousBlock = blockchain[blockchain.length - 1];
-  return {
-    index: blockchain.length,
+function connectToServer() {
+  ws = new WebSocket(centralServerUrl);
+
+  ws.on("open", () => {
+    console.log("Connected to central server");
+    ws.send(JSON.stringify({ type: "GET_BLOCKCHAIN" }));
+    ws.send(JSON.stringify({ type: "GET_UTXO_SET" }));
+  });
+
+  ws.on("message", (message) => {
+    const data = JSON.parse(message);
+
+    switch (data.type) {
+      case "BLOCKCHAIN":
+        if (blockchain.length === 0) {
+          blockchain = data.blockchain;
+          console.log("Updated blockchain. Current length:", blockchain.length);
+          hasReceivedBlockchain = true;
+          checkStartMining();
+        } else if (
+          isValidChain(data.blockchain) &&
+          data.blockchain.length > blockchain.length
+        ) {
+          blockchain = data.blockchain;
+          console.log("Updated blockchain. Current length:", blockchain.length);
+          hasReceivedBlockchain = true;
+          checkStartMining();
+        }
+        break;
+      case "UTXO_SET":
+        utxoSet = new Map(
+          data.utxoSet.map((utxo) => [`${utxo.txid}:${utxo.vout}`, utxo])
+        );
+        hasReceivedUTXOSet = true;
+        checkStartMining();
+        break;
+      case "NEW_BLOCK":
+        if (addBlockToChain(data.block)) {
+          console.log("*****Added new block to chain*****", data.block.index);
+          // Remove transactions in the new block from our mempool
+          mempool = mempool.filter(
+            (tx) =>
+              !data.block.transactions.some((blockTx) => blockTx.id === tx.id)
+          );
+        }
+        break;
+      case "NEW_TRANSACTION":
+        console.log("************verifying transaction************");
+        if (isValidTransaction(data.transaction)) {
+          mempool.push(data.transaction);
+        }
+        break;
+      case "NEW_CHAIN":
+        if (
+          isValidChain(data.blockchain) &&
+          data.blockchain.length > blockchain.length
+        ) {
+          blockchain = data.blockchain;
+          console.log("Updated to new longer chain");
+        }
+        break;
+    }
+  });
+
+  ws.on("close", () => {
+    console.log("Disconnected from central server. Attempting to reconnect...");
+    isMining = false;
+    hasReceivedBlockchain = false;
+    hasReceivedUTXOSet = false;
+    setTimeout(connectToServer, 5000);
+  });
+
+  ws.on("error", (error) => {
+    console.error("WebSocket error:", error);
+  });
+}
+
+function checkStartMining() {
+  if (hasReceivedBlockchain && hasReceivedUTXOSet && !isMining) {
+    startMining();
+  }
+}
+
+function cleanupMempool() {
+  const currentTime = Date.now();
+  mempool = mempool.filter(
+    (tx) => currentTime - tx.timestamp < 24 * 60 * 60 * 1000
+  ); // Remove transactions older than 24 hours
+}
+setInterval(cleanupMempool, 60 * 60 * 1000); //
+
+function mineBlock() {
+  adjustDifficulty();
+  const lastBlock = blockchain[blockchain.length - 1];
+
+  const newBlock = {
+    index: lastBlock ? lastBlock.index + 1 : 0,
     timestamp: Date.now(),
-    transactions: mempool.slice(0, 10), // Include up to 10 transactions
-    previousHash: previousBlock ? hashBlock(previousBlock) : "0",
+    transactions: selectTransactionsForBlock().map((tx) => tx.toHex()),
+    previousHash: lastBlock ? lastBlock.hash : "0".repeat(64),
     nonce: 0,
   };
+
+  // Add coinbase transaction
+  const coinbaseTx = {
+    id: crypto.randomBytes(32).toString("hex"),
+    inputs: [],
+    outputs: [{ address: minerAddress, amount: BLOCK_REWARD }],
+  };
+  newBlock.transactions.unshift(coinbaseTx);
+
+  while (true) {
+    newBlock.hash = calculateBlockHash(newBlock);
+    if (newBlock.hash.startsWith("0".repeat(difficulty))) {
+      break;
+    }
+    newBlock.nonce++;
+  }
+  console.log("***** Mined new block****", newBlock.index);
+  ws.send(JSON.stringify({ type: "NEW_BLOCK", block: newBlock }));
+  //   addBlockToChain(newBlock);
 }
 
-function mineBlock(block) {
-  while (!hashBlock(block).startsWith("0".repeat(DIFFICULTY))) {
-    block.nonce++;
+function calculateBlockHash(block) {
+  const data =
+    block.index +
+    block.previousHash +
+    block.timestamp +
+    JSON.stringify(block.transactions) +
+    block.nonce;
+  return crypto.createHash("sha256").update(data).digest("hex");
+}
+
+function selectTransactionsForBlock() {
+  // Verify transactions before including them
+  const selectedTxs = [];
+  let totalSize = 0;
+  const MAX_BLOCK_SIZE = 1000000; // 1MB
+
+  for (const tx of mempool) {
+    const txSize = JSON.stringify(tx).length;
+    if (totalSize + txSize <= MAX_BLOCK_SIZE && isValidTransaction(tx)) {
+      selectedTxs.push(tx);
+      totalSize += txSize;
+    }
+    if (selectedTxs.length >= 10 || totalSize >= MAX_BLOCK_SIZE) break;
+  }
+
+  return selectedTxs;
+}
+
+function isValidProofOfWork(block) {
+  const hash = calculateBlockHash(block);
+  return hash.startsWith("0".repeat(difficulty)) && hash === block.hash;
+}
+
+function isValidBlockStructure(block) {
+  return (
+    typeof block.index === "number" &&
+    typeof block.hash === "string" &&
+    typeof block.previousHash === "string" &&
+    typeof block.timestamp === "number" &&
+    Array.isArray(block.transactions) &&
+    typeof block.nonce === "number"
+  );
+}
+
+function isValidNewBlock(newBlock, previousBlock) {
+  if (!isValidBlockStructure(newBlock)) {
+    console.log("Invalid block structure");
+    return false;
+  }
+
+  if (!isValidProofOfWork(newBlock)) {
+    console.log("Invalid proof of work");
+    return false;
+  }
+
+  if (newBlock.index === 0) {
+    return true; // Genesis block is always valid
+  }
+
+  if (!previousBlock) {
+    console.log("Previous block is undefined");
+    return false;
+  }
+
+  if (previousBlock.index + 1 !== newBlock.index) {
+    console.log("Invalid index");
+    return false;
+  }
+  if (previousBlock.hash !== newBlock.previousHash) {
+    console.log("Invalid previous hash");
+    return false;
+  }
+
+  return true;
+}
+
+function isValidChain(chainToValidate) {
+  if (JSON.stringify(chainToValidate[0]) !== JSON.stringify(blockchain[0])) {
+    return false;
+  }
+  for (let i = 1; i < chainToValidate.length; i++) {
+    if (!isValidNewBlock(chainToValidate[i], chainToValidate[i - 1])) {
+      return false;
+    }
   }
   return true;
 }
 
-/**
- * TOOK HELP FROM CHATGPT HERE
- */
+function addBlockToChain(newBlock) {
+  if (isValidNewBlock(newBlock, blockchain[blockchain.length - 1])) {
+    console.log("Adding new block to chain", newBlock.index);
+    blockchain.push(newBlock);
+    updateUTXOSet(newBlock);
+    return true;
+  }
+  return false;
+}
 
-function verifyTransaction(tx, mempool) {
-  // 1. Basic structure check
-  if (!tx.id || !tx.inputs || !tx.outputs || !tx.timestamp || !tx.signature) {
-    console.log("Transaction is missing required fields");
+function isValidTransaction(transaction) {
+  if (
+    !transaction.inputs ||
+    !transaction.outputs ||
+    !Array.isArray(transaction.inputs) ||
+    !Array.isArray(transaction.outputs) ||
+    !transaction.signature ||
+    !transaction.publicKey
+  ) {
     return false;
   }
 
-  // 2. Check if transaction is not already in the mempool (prevent double-spending)
-  if (mempool.some((memTx) => memTx.id === tx.id)) {
-    console.log("Transaction is already in the mempool");
-    return false;
+  // Special case for initial balance transactions
+  if (transaction.inputs.length === 0 && transaction.outputs.length === 1) {
+    return true;
   }
-
-  // 3. Verify transaction ID
-  const calculatedTxId = calculateTransactionHash(tx);
-  if (calculatedTxId !== tx.id) {
-    console.log("Transaction ID is invalid");
-    return false;
-  }
-
-  // 4. Check that inputs are in the UTXO set and not already spent
-  let inputSum = 0;
-  for (let input of tx.inputs) {
-    const utxo = utxoSet.get(input.txOutId + ":" + input.txOutIndex);
-    if (!utxo) {
-      console.log("Input refers to a non-existent or already spent output");
+  // Check if all inputs are unspent
+  for (const input of transaction.inputs) {
+    const utxoKey = `${input.txid}:${input.vout}`;
+    if (!utxoSet.has(utxoKey)) {
       return false;
     }
-    inputSum += utxo.amount;
   }
-
-  // 5. Verify that input amount equals output amount
-  const outputSum = tx.outputs.reduce((sum, output) => sum + output.amount, 0);
-  if (inputSum !== outputSum) {
-    console.log("Input amount does not equal output amount");
-    return false;
-  }
-
-  // 6. Verify the signature
-  const txData = {
-    inputs: tx.inputs,
-    outputs: tx.outputs,
-    timestamp: tx.timestamp,
-  };
-  const txDataHash = crypto
-    .createHash("sha256")
-    .update(JSON.stringify(txData))
-    .digest();
 
   try {
-    if (
-      !secp256k1.ecdsaVerify(
-        Buffer.from(tx.signature, "hex"),
-        txDataHash,
-        Buffer.from(tx.inputs[0].publicKey, "hex")
-      )
-    ) {
-      console.log("Transaction signature is invalid");
+    const { signature, publicKey, ...transactionData } = transaction;
+    const transactionBuffer = Buffer.from(JSON.stringify(transactionData));
+    const sigHash = bitcoin.crypto.hash256(transactionBuffer);
+
+    const signatureBuffer = Buffer.from(signature, "hex");
+    const publicKeyBuffer = Buffer.from(publicKey, "hex");
+
+    const pubKeyPair = ECPair.fromPublicKey(publicKeyBuffer);
+
+    if (!pubKeyPair.verify(sigHash, signatureBuffer)) {
+      console.log("Invalid signature");
       return false;
     }
-  } catch (err) {
-    console.log("Error verifying signature:", err.message);
+  } catch (e) {
+    console.log("Error verifying signature:", e);
+    return false;
+  }
+  // Check if total input amount is greater than or equal to total output amount
+  const totalInput = transaction.inputs.reduce((sum, input) => {
+    const utxo = utxoSet.get(`${input.txid}:${input.vout}`);
+    return sum + utxo.amount;
+  }, 0);
+
+  const totalOutput = transaction.outputs.reduce(
+    (sum, output) => sum + output.amount,
+    0
+  );
+
+  if (totalInput < totalOutput) {
     return false;
   }
 
-  console.log("Transaction verified successfully");
   return true;
 }
 
-function calculateTransactionHash(tx) {
-  const txData = {
-    inputs: tx.inputs,
-    outputs: tx.outputs,
-    timestamp: tx.timestamp,
-  };
-  return crypto
-    .createHash("sha256")
-    .update(JSON.stringify(txData))
-    .digest("hex");
-}
-
-// Function to update UTXO set when a new block is added
 function updateUTXOSet(block) {
-  for (let tx of block.transactions) {
-    // Remove spent outputs
-    for (let input of tx.inputs) {
-      utxoSet.delete(input.txOutId + ":" + input.txOutIndex);
+  // Remove spent outputs
+  block.transactions.forEach((tx, txIndex) => {
+    if (txIndex > 0) {
+      // Skip coinbase transaction
+      tx.inputs.forEach((input) => {
+        const utxoKey = `${input.txid}:${input.vout}`;
+        utxoSet.delete(utxoKey);
+      });
     }
+  });
 
-    // Add new unspent outputs
+  // Add new unspent outputs
+  block.transactions.forEach((tx) => {
     tx.outputs.forEach((output, index) => {
-      utxoSet.set(tx.id + ":" + index, {
+      const utxoKey = `${tx.id}:${index}`;
+      utxoSet.set(utxoKey, {
+        txid: tx.id,
+        vout: index,
+        address: output.address,
         amount: output.amount,
-        publicKeyHash: output.publicKeyHash, // The recipient's public key hash
       });
     });
-  }
+  });
 }
 
-function verifyBlock(newBlock) {
-  /**
-   * Check if the block contains all required fields
-   */
-  if (
-    !newBlock.index ||
-    !newBlock.timestamp ||
-    !newBlock.transactions ||
-    !newBlock.previousHash ||
-    !newBlock.nonce
-  ) {
-    console.log("*****block is missing required fields");
-    return false;
-  }
+// Generate a new address for the miner
+const keyPair = bip32
+  .fromSeed(crypto.randomBytes(32))
+  .derivePath("m/44'/0'/0'/0/0");
+const { address: minerAddress } = bitcoin.payments.p2pkh({
+  pubkey: keyPair.publicKey,
+});
 
-  /**
-   * Check if the block index is correct
-   * (equal to the length of the blockchain)
-   */
-  if (newBlock.index !== blockchain.length) {
-    console.log("*****block index is incorrect*****");
-    return false;
-  }
+console.log(`Miner address: ${minerAddress}`);
 
-  /**
-   *  Check if the timestamp is in the past and not too far
-   */
-  const currentTime = Date.now();
-  if (
-    newBlock.timestamp > currentTime ||
-    (blockchain.length > 0 &&
-      newBlock.timestamp <= blockchain[blockchain.length - 1].timestamp)
-  ) {
-    console.log("*****block timestamp is invalid*****");
-    return false;
-  }
-
-  /**
-   * Check if the previous hash matches
-   * the hash of the last block in the chain
-   */
-  if (blockchain.length > 0) {
-    const previousBlock = blockchain[blockchain.length - 1];
-    if (newBlock.previousHash !== hashBlock(previousBlock)) {
-      console.log("*****previous hash is incorrect*****");
-      return false;
-    }
-  }
-
-  /**
-   * Check if the hash of the block satisfies
-   * the proof-of-work requirement
-   */
-  if (!hashBlock(newBlock).startsWith("0".repeat(DIFFICULTY))) {
-    console.log("*****proof-of-work is invalid*****");
-    return false;
-  }
-
-  /**
-   * Check if all transactions in the block are valid
-   */
-  for (let tx of newBlock.transactions) {
-    if (!verifyTransaction(tx)) {
-      console.log("*****transaction verification failed*****");
-      return false;
-    }
-  }
-
-  /**
-   * Check if the coinbase transaction is valid
-   * (first transaction in the block)
-   */
-  if (
-    newBlock.transactions[0].from !== "coinbase" ||
-    newBlock.transactions[0].amount !== BLOCK_REWARD
-  ) {
-    console.log("*****invalid coinbase transaction*****");
-    return false;
-  }
-
-  /**
-   * Check for double spending within the block
-   */
-  const txInputs = new Set();
-  for (let tx of newBlock.transactions.slice(1)) {
-    // Skip coinbase transaction
-    if (txInputs.has(tx.from)) {
-      console.log("*****double spending detected within block*****");
-      return false;
-    }
-    txInputs.add(tx.from);
-  }
-
-  console.log("*****block verified successfully****");
-
-  // Update the UTXO set with the new block
-  updateUTXOSet(newBlock);
-  return true;
+// Start mining
+function startMining() {
+  if (isMining) return;
+  isMining = true;
+  console.log("Starting mining process...");
+  miningLoop();
 }
 
-function verifyTransaction(tx) {
-  // This is a simplified transaction verification
-  // In a real system, you'd check signatures, verify that inputs are unspent, etc.
-  if (!tx.from || !tx.to || !tx.amount || tx.amount <= 0) {
-    return false;
-  }
-
-  // Verify signature (simplified)
-  const txData = {
-    from: tx.from,
-    to: tx.to,
-    amount: tx.amount,
-    timestamp: tx.timestamp,
-  };
-  const hash = crypto
-    .createHash("sha256")
-    .update(JSON.stringify(txData))
-    .digest("hex");
-
-  // In a real system, you'd use proper cryptographic verification here
-  return tx.signature && tx.signature.length > 0;
+function miningLoop() {
+  if (!isMining) return;
+  mineBlock();
+  setTimeout(miningLoop, 1000 * 60); // Mine a new block every 1 minute
 }
 
-function hashBlock(block) {
-  return crypto
-    .createHash("sha256")
-    .update(JSON.stringify(block))
-    .digest("hex");
-}
-
-console.log("Miner server started");
+// Start the miner
+connectToServer();

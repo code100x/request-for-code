@@ -6,13 +6,40 @@ import { useEffect } from "react";
 import { Toaster } from "sonner";
 
 const App = () => {
-  const { loadWallet } = useAppStore((state) => ({
+  const {
+    loadWallet,
+    initWsClient,
+    wsClient,
+    listenEvents,
+    wallet,
+    sendEventRequest,
+    isSocketConnected,
+  } = useAppStore((state) => ({
     loadWallet: state.loadWallet,
+    initWsClient: state.initWsClient,
+    wsClient: state.wsClient,
+    listenEvents: state.listenEvents,
+    wallet: state.wallet,
+    sendEventRequest: state.sendEventRequest,
+    isSocketConnected: state.isSocketConnected,
   }));
 
   useEffect(() => {
     loadWallet();
   }, []);
+
+  useEffect(() => {
+    if (!wsClient) {
+      initWsClient();
+    }
+    if (isSocketConnected && wallet) {
+      console.log("Listening to events");
+      setTimeout(() => {
+        listenEvents();
+        sendEventRequest();
+      }, 1000);
+    }
+  }, [wsClient, wallet, isSocketConnected]);
 
   return (
     <BrowserRouter>
