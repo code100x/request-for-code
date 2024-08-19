@@ -8,12 +8,14 @@ const SignTransactions = () => {
   const [loading, setLoading] = useState(false);
   const [amount, setAmount] = useState("");
   const [receipient, setReceipient] = useState("");
-  const { wallet, utxos, wsClient, walletBalance } = useAppStore((state) => ({
-    wallet: state.wallet,
-    utxos: state.utxos,
-    wsClient: state.wsClient,
-    walletBalance: state.walletBalance,
-  }));
+  const { wallet, utxos, wsClient, walletBalance, sendEventRequest } =
+    useAppStore((state) => ({
+      wallet: state.wallet,
+      utxos: state.utxos,
+      wsClient: state.wsClient,
+      walletBalance: state.walletBalance,
+      sendEventRequest: state.sendEventRequest,
+    }));
 
   const sendTransaction = async () => {
     if (!wallet) return toast.error("Please create a wallet first");
@@ -59,6 +61,7 @@ const SignTransactions = () => {
         );
       //   console.log("Transaction sent:", transaction.id);
       toast.success("Transaction sent successfully");
+      sendEventRequest();
       setAmount("");
       setReceipient("");
     } catch (error) {
