@@ -1,7 +1,5 @@
 const WebSocket = require("ws");
 const http = require("http");
-
-const { Blockchain, Transaction, Block } = require("../main-server/blockChain");
 const {
   PORT,
   RECONNECT_INTERVAL,
@@ -9,7 +7,9 @@ const {
   CENTRAL_SERVER_URL,
 } = require("./config");
 
-const port = process.argv[2] || PORT || 3001;
+const { Blockchain, Transaction, Block } = require("./blockChain");
+
+const port = PORT || 3001;
 let ws;
 let isConnected = false;
 
@@ -85,6 +85,22 @@ function handleIncomingMessage(message) {
       }
       break;
     }
+
+    case "PENDING_TRANSACTIONS":
+      console.log("Received pending transactions");
+      message.transactions.forEach((tx) => {
+        try {
+          const newTransaction = new Transaction(
+            tx.fromAddress,
+            tx.toAddress,
+            tx.amount
+          );
+          minerChain.addTransaction(newTransaction, true);
+        } catch (error) {
+          console.error("Error adding pending transaction:", error.message);
+        }
+      });
+      break;
 
     default:
       console.log("Unknown message type:", message.type);

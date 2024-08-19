@@ -36,6 +36,16 @@ wss.on("connection", (ws, req) => {
       })
     );
 
+    // Send pending transactions to the newly connected miner
+    if (mainChain.transactionPool.length > 0) {
+      ws.send(
+        JSON.stringify({
+          type: "PENDING_TRANSACTIONS",
+          transactions: mainChain.transactionPool,
+        })
+      );
+    }
+
     ws.on("message", (message) => {
       const data = JSON.parse(message);
       switch (data.type) {
@@ -101,6 +111,10 @@ function removeConfirmedTransactions(transactions) {
 
 function broadcastToMiners(message) {
   console.log(`Broadcasting message to miners: ${message}`);
+  if (minerClients.size == 0) {
+    console.log("No active miners. adding to transaction pool");
+    return;
+  }
 
   for (const [minerPort, client] of minerClients) {
     if (client.readyState === WebSocket.OPEN) {
