@@ -18,9 +18,6 @@ function publicKeyToAddress(publicKey) {
 function createTransaction(publicKey, senderAddress, recipient, amount, privateKey) {
     const key = ec.keyFromPrivate(privateKey, 'hex');
 
-    //convert string amount to number
-    amount = parseFloat(amount);
-
     const transaction = {
         publicKey,
         senderAddress,
