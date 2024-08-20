@@ -1,0 +1,116 @@
+.App {
+  padding: 20px;
+  text-align: center;
+  font-family: Arial, sans-serif;
+  background-color: #eee3ff;
+  height: 100vh;
+}
+
+h1 {
+  padding-top: 10rem;
+  color: #5c0095;
+}
+
+.wallet-details {
+  margin-top: 20px;
+  padding: 20px;
+  border: 1px solid darkviolet;
+  border-radius: 8px;
+  background-color: #f9f9f9;
+  display: inline-block;
+  text-align: left;
+}
+
+
+.create-wallet-button {
+  padding: 10px 20px;
+  font-size: 24px;
+  cursor: pointer;
+  font-weight: 500;
+  margin-top: 20px;
+}
+
+.wallet-details h2 {
+  margin-bottom: 30px;
+  color: darkviolet;
+}
+
+.wallet-details p {
+  font-size: 20px;
+  margin: 10px 0;
+}
+
+input {
+  padding: 10px;
+  margin: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 16px;
+}
+
+input:focus {
+  border-color: darkviolet;
+  outline: none;
+}
+
+button {
+  padding: 10px 20px;
+  font-size: 16px;
+  border: none;
+  border-radius: 4px;
+  background-color: darkviolet;
+  color: white;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+button:hover {
+  background-color: darkviolet;
+}
+
+button:disabled {
+  background-color: #dcdcdc;
+  cursor: not-allowed;
+}
+
+p.error {
+  color: red;
+}
+
+
+.wallet-details p {
+  font-size: 16px;
+  margin: 10px 0;
+}
+
+.wallet-details .mnemonic {
+  font-size: 16px;
+  margin-top: 10px;
+  color: #333;
+}
+
+
+.mnemonic {
+  margin-top: 20px;
+  font-family: monospace;
+  line-height: 2.5;
+}
+
+.mnemonic-group {
+  margin-bottom: 10px;
+  font-size: 14px;
+}
+
+
+.input-field {
+  padding: 10px;
+  margin: 5px;
+  width: calc(100% - 22px); 
+}
+
+.send-transaction-button {
+  padding: 10px 20px;
+  font-size: 16px;
+  cursor: pointer;
+  margin-top: 10px; 
+}
