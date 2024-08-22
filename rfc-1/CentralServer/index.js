@@ -2,60 +2,72 @@ const express = require('express');
 const mongoose = require('mongoose');
 const http = require('http');
 const WebSocket = require('ws');
+const nacl = require('tweetnacl');
+const { PublicKey } = require('@solana/web3.js');
+const crypto = require('crypto');
 const axios = require('axios');
-const apiRoutes = require('./route/apihandler');
 const Mempool = require('./model/mempool');
 const Miner = require('./model/miner');
-const Block = require('./model/block');
+const Block = require("./model/block");
+const cors = require('cors');
+
 
 const app = express();
+app.use(cors());
 const httpServer = http.createServer(app);
 const wss = new WebSocket.Server({ server: httpServer });
 
 mongoose.connect('mongodb://localhost:27017/bitcoin_simulator');
 
-app.use(express.json()); // to parse JSON request bodies
-app.use('/api', apiRoutes);
+app.use(express.json());
 
-let miners = []; 
+let connectedMiners = {};
 
 function generateMinerId() {
-    return `miner_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+    return crypto.randomBytes(16).toString('hex');
 }
 
-async function updateMinerStatus(minerId, status) {
+function generateHash(data) {
+    return crypto.createHash('sha256').update(data).digest();
+}
+
+function verifySignature(message, signatureHex, pubKeyBase58) {
+    const hash = generateHash(message);
+    const signature = Buffer.from(signatureHex, 'hex');
+
     try {
-        const miner = await Miner.findOneAndUpdate(
-            { minerId },
-            { connected: status, lastSeen: new Date() },
-            { upsert: true, new: true }
-        );
-
-        if (status) {
-            miners.push(minerId); 
-        } else {
-            miners = miners.filter(id => id !== minerId); 
-        }
-
-        console.log(`Miner ${miner.minerId} is now ${status ? 'connected' : 'disconnected'}`);
+        const publicKey = new PublicKey(pubKeyBase58);
+        return nacl.sign.detached.verify(hash, signature, publicKey.toBuffer());
     } catch (err) {
-        console.error('Error updating miner status:', err);
+        console.error('Error verifying signature:', err);
+        return false;
     }
 }
 
 async function handleNewTransaction(transaction) {
+    const { sender_pub_id, receiver_pub_id, amount, timestamp, signature } = transaction;
+    const message = `${sender_pub_id}${receiver_pub_id}${amount}${timestamp}`;
+
     try {
-        await Mempool.create(transaction);
-        distributeTransactionToMiner(transaction);
+        const isSignatureValid = verifySignature(message, signature, sender_pub_id);
+
+        if (isSignatureValid) {
+            await Mempool.create(transaction);
+            distributeTransactionToMiner(transaction);
+        } else {
+            console.log('Invalid transaction detected.');
+        }
     } catch (err) {
         console.error('Error handling new transaction:', err);
     }
 }
 
-function distributeTransactionToMiner(transaction) {
-    if (miners.length > 0) {
-        const minerIndex = Math.floor(Math.random() * miners.length);
-        const minerId = miners[minerIndex];
+async function distributeTransactionToMiner(transaction) {
+    const minerIds = Object.keys(connectedMiners);
+
+    if (minerIds.length > 0) {
+        const minerIndex = Math.floor(Math.random() * minerIds.length);
+        const minerId = minerIds[minerIndex];
         wss.clients.forEach((wsClient) => {
             if (wsClient.readyState === WebSocket.OPEN && wsClient.minerId === minerId) {
                 wsClient.send(JSON.stringify({
@@ -65,64 +77,87 @@ function distributeTransactionToMiner(transaction) {
             }
         });
 
-        console.log(`Transaction ${transaction.transactionId} sent to miner ${minerId}`);
+        console.log(`Transaction ${transaction.signature} sent to miner ${minerId}`);
     } else {
         console.log('No miners are currently connected.');
     }
 }
 
-async function handleNewBlock(message) {
-    const parsedMessage = JSON.parse(message);
-    const newBlock = new Block(parsedMessage.payload);
+async function updateMinerStatus(minerId, isConnected) {
+    if (isConnected) {
+        connectedMiners[minerId] = true;
+    } else {
+        delete connectedMiners[minerId];
+    }
 
+    await Miner.findOneAndUpdate(
+        { minerId },
+        { isConnected },
+        { upsert: true, new: true }
+    );
+}
+
+async function handleNewBlock(blockData) {
     try {
-        await newBlock.save();
-        const blockTransactions = parsedMessage.payload.transactions;
-        await Mempool.deleteMany({ transactionId: { $in: blockTransactions.map(tx => tx.transactionId) } });
+        const { previousHash, transactions, nonce, timestamp, hash } = blockData;
+        const lastBlock = await Block.findOne().sort({ _id: -1 });
+        if (lastBlock && lastBlock.hash !== previousHash) {
+            console.log('Invalid block: Previous hash does not match');
+            return;
+        }
 
-        // Send transactions to the wallet server to update balances
-        for (const tx of blockTransactions) {
+        // Verify each transaction in the block
+        for (const tx of transactions) {
+            const { sender_pub_id, receiver_pub_id, amount, timestamp, signature } = tx;
+            const message = `${sender_pub_id}${receiver_pub_id}${amount}${timestamp}`;
+            const isSignatureValid = verifySignature(message, signature, sender_pub_id);
+
+            if (!isSignatureValid) {
+                console.log(`Invalid transaction in block: ${signature}`);
+                return;
+            }
+
+            // If valid, call /maketxn to complete the transaction
             await axios.post('http://localhost:3002/maketxn', {
-                transaction_id: tx.transactionId,
-                sender_pub_id: tx.sender_pub_id,
-                receiver_pub_id: tx.receiver_pub_id,
-                amount: tx.amount,
-                timestamp: tx.timestamp
+                amount,
+                sender_pub_id,
+                receiver_pub_id,
+                signature,
+                timestamp,
             });
         }
 
-        // Notify all connected miners about the new block
-        const clients = await Miner.find({ connected: true });
-        clients.forEach((client) => {
-            wss.clients.forEach((wsClient) => {
-                if (wsClient.readyState === WebSocket.OPEN) {
-                    wsClient.send(JSON.stringify(parsedMessage));
-                }
-            });
+        await Block.create(blockData);
+
+        // Remove transactions from the mempool after they are added to a block
+        for (const tx of transactions) {
+            await Mempool.deleteOne({ signature: tx.signature });
+        }
+
+        console.log('New block added to the blockchain:', blockData);
+
+        // Broadcast the new block to all connected clients
+        wss.clients.forEach((wsClient) => {
+            if (wsClient.readyState === WebSocket.OPEN) {
+                wsClient.send(JSON.stringify({
+                    type: 'NEW_BLOCK_BROADCAST',
+                    payload: blockData,
+                }));
+            }
         });
     } catch (err) {
         console.error('Error handling new block:', err);
     }
 }
 
-// New API route for wallet to submit transactions
 app.post('/api/submit-transaction', async (req, res) => {
-    const { transaction_id, sender_pub_id, receiver_pub_id, amount, timestamp } = req.body;
+    const { signature, sender_pub_id, receiver_pub_id, amount, timestamp } = req.body;
 
-    // console.log(req.body);
-
-    if (!transaction_id || !sender_pub_id || !receiver_pub_id || !amount || !timestamp) {
+    if (!signature || !sender_pub_id || !receiver_pub_id || !amount || !timestamp) {
         return res.status(400).json({ msg: 'Missing required fields' });
     }
 
-    const transaction = {
-        transactionId: transaction_id,
-        sender_pub_id,
-        receiver_pub_id,
-        amount,
-        timestamp
-    };
-
+    const transaction = { signature, sender_pub_id, receiver_pub_id, amount, timestamp };
     try {
         await handleNewTransaction(transaction);
         res.status(200).json({ msg: 'Transaction received and added to mempool' });
@@ -131,31 +166,37 @@ app.post('/api/submit-transaction', async (req, res) => {
     }
 });
 
-wss.on('connection', (ws) => {
+wss.on('connection', async (ws) => {
     const minerId = generateMinerId();
-    ws.minerId = minerId; 
-    updateMinerStatus(minerId, true);
+    ws.minerId = minerId;
+    await updateMinerStatus(minerId, true);
+
+    console.log(`Miner ${minerId} connected`);
+
+    // Send the blockchain immediately after connection
+    try {
+        const blockchain = await Block.find().sort({ _id: 1 });
+        ws.send(JSON.stringify({
+            type: 'BLOCKCHAIN',
+            payload: blockchain,
+            version: '1.0.0',
+        }));
+        console.log(`Blockchain sent to miner ${minerId}`);
+    } catch (err) {
+        console.error('Error sending blockchain:', err);
+    }
 
     ws.on('message', async (message) => {
         const parsedMessage = JSON.parse(message);
         const { type, payload } = parsedMessage;
 
-        if (type === 'NEW_TRANSACTION') {
-            await handleNewTransaction(payload);
-        } else if (type === 'NEW_BLOCK') {
-            await handleNewBlock(message);
-        } else if (type === 'SEND_CHAIN') {
-            const blockchain = await Block.find().sort({ _id: 1 });
-            ws.send(JSON.stringify({
-                type: 'BLOCKCHAIN',
-                payload: blockchain,
-                version: '1.0.0',
-            }));
+        if (type === 'NEW_BLOCK') {
+            await handleNewBlock(payload);
         }
     });
 
-    ws.on('close', () => {
-        updateMinerStatus(minerId, false);
+    ws.on('close', async () => {
+        await updateMinerStatus(minerId, false);
     });
 });
 

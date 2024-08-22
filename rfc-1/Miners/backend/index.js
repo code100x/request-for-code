@@ -3,9 +3,11 @@ const express = require('express');
 const http = require('http');
 const bodyParser = require('body-parser');
 const crypto = require('crypto');
+const cors = require('cors')
 
 const app = express();
 app.use(bodyParser.json());
+app.use(cors());
 
 const httpServer = http.createServer(app);
 const wss = new WebSocket('ws://localhost:3001');
@@ -43,7 +45,7 @@ wss.on('message', (message) => {
         mempool.push(parsedMessage.payload);
         console.log('Received new transaction:', parsedMessage.payload);
 
-        if (mempool.length >= 3) {
+        if (mempool.length >= 1) {
             const block = {
                 index: parseInt(blockchain[blockchain.length-1].index)+1,
                 previousHash: blockchain[blockchain.length - 1].hash,

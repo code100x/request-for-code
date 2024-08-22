@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 const mempoolSchema = new mongoose.Schema({
-    transactionId: { type: String, required: true, unique: true },
+    signature: { type: String, required: true, unique: true },
     sender_pub_id: { type: String, required: true },
     receiver_pub_id: { type: String, required: true },
     amount: { type: Number, required: true },

@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 const transactionsSchema = new mongoose.Schema({
-    transaction_id:String,
+    signature:String,
     sender_pub_id: String,
     receiver_pub_id: String,
     amount: Number,
