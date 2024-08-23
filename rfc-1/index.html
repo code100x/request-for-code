@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Bitcoin-like Frontend</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+</head>
+<body>
+    <h1>Simple Bitcoin-like Frontend</h1>
+    
+    <button onclick="createWallet()">Create Wallet</button>
+    <p>Public Key: <span id="publicKey"></span></p>
+    
+    <div>
+        <input type="text" id="recipient" placeholder="Recipient">
+        <input type="number" id="amount" placeholder="Amount">
+        <button onclick="sendTransaction()">Send Transaction</button>
+    </div>
+
+    <script>
+        let privateKey = '';
+        let publicKey = '';
+
+        function createWallet() {
+            privateKey = CryptoJS.lib.WordArray.random(16).toString();
+            publicKey = CryptoJS.SHA256(privateKey).toString();
+            document.getElementById('publicKey').innerText = publicKey;
+        }
+
+        function signTransaction() {
+            const transaction = {
+                from: publicKey,
+                to: document.getElementById('recipient').value,
+                amount: document.getElementById('amount').value
+            };
+            const transactionString = JSON.stringify(transaction);
+            const signature = CryptoJS.HmacSHA256(transactionString, privateKey).toString();
+            return { ...transaction, signature };
+        }
+
+        function sendTransaction() {
+            const signedTransaction = signTransaction();
+            fetch('http://localhost:3001/transaction', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(signedTransaction),
+            }).then(response => {
+                if (response.ok) {
+                    alert('Transaction sent successfully!');
+                } else {
+                    alert('Failed to send transaction.');
+                }
+            });
+        }
+    </script>
+</body>
+</html>
