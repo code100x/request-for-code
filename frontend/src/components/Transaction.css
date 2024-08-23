@@ -1,0 +1,124 @@
+.transactions-container {
+    max-width: 60rem;
+    margin: 0 auto;
+    padding: 0.1rem;
+    font-family: Arial, sans-serif;
+}
+
+h2 {
+    text-align: center;
+}
+
+.blockchain-container {
+    display: flex;
+    overflow-x: auto;
+    max-width: 120rem;
+    margin-top: 2rem;
+    padding: 1rem;
+    border: 1px solid #c1b1b1;
+    border-radius: 5px;
+}
+
+.block {
+    border: 1px solid #bd9e9e;
+    padding: 0.5rem;
+    margin-right: 20px;
+    border-radius: 5px;
+    min-width: 200px;
+    flex-shrink: 0;
+    background-color: #ddd;
+}
+
+.block h3 {
+    display: flex;
+    justify-content: center;
+}
+
+.block p {
+    margin: 0.8rem 0;
+    /* padding: 0.1rem 0; */
+    display: flex;
+    justify-content: center;
+}
+
+
+.container {
+    margin-top: 20px;
+}
+
+.wallet-container {
+    background-color: #f9f9f9;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.transaction-form input {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 10px;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+}
+
+.generate-wallet-btn, .sign-transaction-btn, .submit-transaction-btn {
+    width: 100%;
+    padding: 10px;
+    border-radius: 4px;
+}
+
+.submit-transaction-container {
+    background-color: #e9f7ff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+
+
+
+
+
+.transactions-container {
+    padding: 20px;
+}
+
+.blockchain-container {
+    margin-bottom: 20px;
+}
+
+.block {
+    border: 1px solid #ccc;
+    padding: 10px;
+    margin-bottom: 10px;
+}
+
+.wallet-container, .submit-transaction-container {
+    padding: 20px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+}
+
+.key-item {
+    display: flex;
+    align-items: start;
+    margin-bottom: 10px;
+}
+
+.key-field {
+    flex: 1;
+    cursor: pointer;
+    padding: 5px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    margin-right: 10px;
+    
+}
+
+.toggle-visibility-btn {
+    cursor: pointer;
+}
+
+.copy-btn {
+    margin-left: 10px;
+}
