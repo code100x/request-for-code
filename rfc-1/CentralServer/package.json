@@ -1,0 +1,25 @@
+{
+  "name": "centralserver",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@solana/web3.js": "^1.95.2",
+    "axios": "^1.7.4",
+    "bitcoinjs-lib": "^6.1.6",
+    "cors": "^2.8.5",
+    "crypto": "^1.0.1",
+    "ecpair": "^2.1.0",
+    "express": "^4.19.2",
+    "mongoose": "^8.5.3",
+    "tiny-secp256k1": "^2.2.3",
+    "tweetnacl": "^1.0.3",
+    "ws": "^8.18.0"
+  }
+}
