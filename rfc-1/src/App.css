@@ -1,0 +1,184 @@
+body {
+  background-color: #121212;
+  color: #ffffff;
+  font-family: Arial, sans-serif;
+}
+
+.App {
+  text-align: center;
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+h1,
+h2,
+h3 {
+  color: #bb86fc;
+}
+
+.main-content {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 20px;
+}
+
+.wallet-section {
+  width: 45%;
+}
+
+input {
+  background-color: #2c2c2c;
+  border: none;
+  border-radius: 4px;
+  color: #ffffff;
+  padding: 10px;
+  margin: 10px 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+button {
+  background-color: #bb86fc;
+  color: #000000;
+  border: none;
+  border-radius: 4px;
+  padding: 10px 20px;
+  margin: 10px 0;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+button:hover {
+  background-color: #3700b3;
+  color: #ffffff;
+}
+
+.create-wallet-btn {
+  font-size: 1.2em;
+}
+
+.wallet-info {
+  background-color: #1e1e1e;
+  border-radius: 8px;
+  padding: 20px;
+  margin: 20px 0;
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.toggle-key-btn {
+  background: none;
+  border: none;
+  color: #bb86fc;
+  cursor: pointer;
+  margin-left: 10px;
+}
+
+.transaction-section {
+  background-color: #1e1e1e;
+  border-radius: 8px;
+  padding: 20px;
+  margin: 20px 0;
+}
+
+.send-btn {
+  background-color: #03dac6;
+  color: #000000;
+}
+
+.send-btn:hover {
+  background-color: #018786;
+  color: #ffffff;
+}
+
+.transaction-info {
+  margin-top: 10px;
+  font-weight: bold;
+  color: #03dac6;
+}
+
+.blockchain-explorer {
+  width: 50%;
+  background-color: #1e1e1e;
+  border-radius: 8px;
+  padding: 20px;
+  margin-top: 20px;
+}
+
+.blockchain-container {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.block {
+  background-color: #2c2c2c;
+  border-radius: 4px;
+  padding: 10px;
+  margin: 10px 0;
+  animation: slideIn 0.3s ease-in-out;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateY(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.logs {
+  background-color: #1e1e1e;
+  border-radius: 8px;
+  padding: 20px;
+  margin-top: 20px;
+}
+
+.logs-container {
+  max-height: 200px;
+  overflow-y: auto;
+  text-align: left;
+}
+
+.log-entry {
+  margin-bottom: 10px;
+  animation: slideIn 0.3s ease-in-out;
+}
+
+.log-timestamp {
+  color: #bb86fc;
+  margin-right: 10px;
+}
+
+.log-message {
+  color: #e0e0e0;
+}
+
+/* Scrollbar Styles */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1e1e1e;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #bb86fc;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3700b3;
+}
