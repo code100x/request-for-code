@@ -1,0 +1,9 @@
+{
+	"dependencies": {
+		"cors": "^2.8.5",
+		"crypto": "^1.0.1",
+		"elliptic": "^6.5.7",
+		"express": "^4.19.2",
+		"ws": "^8.18.0"
+	}
+}
