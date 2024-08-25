@@ -1,0 +1,20 @@
+{
+  "name": "miner-server",
+  "version": "1.0.0",
+  "description": "miner-server",
+  "main": "serve.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "vuchint sutapalli",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "elliptic": "^6.5.7",
+    "express": "^4.19.2",
+    "ngrok": "^5.0.0-beta.2",
+    "nodemon": "^3.1.4",
+    "ws": "^8.18.0"
+  }
+}
