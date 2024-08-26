@@ -1,5 +1,5 @@
 {
-  "name": "miner",
+  "name": "central",
   "version": "1.0.0",
   "description": "",
   "main": "dist/index.js",
@@ -8,10 +8,13 @@
     "dev": "tsc && node dist/index.js"
   },
   "author": "",
-  "license": "ISC",
   "dependencies": {
     "@repo/types": "",
     "@repo/typescript-config": "",
-    "bs58": "^6.0.0"
+    "bs58": "^6.0.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.12"
   }
 }
