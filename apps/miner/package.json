@@ -1,0 +1,17 @@
+{
+  "name": "miner",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "tsc && node dist/index.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@repo/types": "",
+    "@repo/typescript-config": "",
+    "bs58": "^6.0.0"
+  }
+}

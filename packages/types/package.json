@@ -1,0 +1,22 @@
+{
+  "name": "@repo/types",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "tsc --watch",
+    "build": "tsc"
+  },
+  "exports": {
+    "./transaction": {
+      "types": "./src/Transaction.ts",
+      "default": "./dist/Transaction.js"
+    }
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "*",
+    "typescript": "latest"
+  },
+  "author": "",
+  "license": "ISC"
+}
